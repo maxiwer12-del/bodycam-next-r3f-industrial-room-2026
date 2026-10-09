@@ -40,3 +40,36 @@
 6. Only then create a new preview deployment under the **existing Vercel project**, not a new project or production overwrite, and ask user for art-direction approval.
 
 No weapon/character/multiplayer work is authorized by this candidate review.
+
+
+## Progress update — free city block, reproducible scene, 2026-10-09
+
+**Scope note:** `art/bistro-urban-free-map` preserves the original Three.js/R3F game project; the main production scene is still rejected. This is an asset-inspection branch, NOT a finished FPS map.
+
+**Real verified source files**
+- Actual `BistroExterior.bin` was downloaded with Git LFS (179,963,220 source bytes).
+- Authored source `BistroExterior.gltf` loaded via glTF-Transform, cropped to a 32 × 32 metre *selection window*. Extending road/building meshes keep the total exported scene bounds much larger; do not misstate those exported bounds as player space.
+- Exported `scene.gltf` and `BistroExterior.bin` plus KTX2 textures are **physically present in sandbox** and imported in browser through `/dev/bistro`; 551 source meshes, 689 WebGL Mesh primitives, 1,046,667 triangles, 103 PBR materials and 345 referenced KTX2 files.
+- **120 large KTX2 textures** were individually decoded, resampled using Lanczos, rebuilt with UASTC/ZSTD10 plus mipmaps, then validated by Khronos `ktx validate`. Result: **0 conversion failures**, saved **136,743,288 bytes (~137 MB)**. Final sampled region including geometry and textures: approximately **198 MB** on disk.
+- Original high-resolution source textures remain separately preserved in the downloaded upstream repository (and are not shipped as part of this candidate).
+- Source-aligned environment `san_giuseppe_bridge_4k.hdr` was downsampled into valid 1024 × 512 RGBe HDR for reflection-probe review.
+
+**Real technical QA**
+- `npx next build`: exit 0 for the developer scene `/dev/bistro` (no production release).
+- First headless Chromium WebGL2 full-quality test exceeded the 4 GB sandbox GPU/CPU memory budget before screenshots could finish.
+- Browser WebGL2 `?lowgpu` inspector *did load* the real authored geometry and textures in approximately 8 seconds; one sampled readout indicated ~7.5 FPS in **software SwiftShader**, which says nothing about a physical iPhone or Galaxy.
+- Five actual 720 × 400 screenshots were captured in the isolated environment: initial, street A, street B, facades and ground closeup. Browser crashed/closed before the sixth. They are development shots only, not visually approved.
+- Art-review blocker: sidewalk, road and shadows are too dark in the low-GPU view; no postprocessing trick should hide this. This must be corrected with valid direct/indirect light and physically plausible material values before any preview is labeled acceptable.
+- Raycast on actual author meshes: **48/81** sampled 3-metre grid points offered plausible supported walking positions; **45** of those 48 formed one connected component on the sampled grid. This is not a complete collision/navmesh test. Individual building overlaps and full routes remain to be checked.
+- No mobile real-device FPS, no accepted collisions, no approved six-angle gallery, no new Vercel preview.
+
+**Files added on this branch:** `src/app/dev/bistro/BistroCandidate.tsx`, `src/app/dev/bistro/page.tsx`, `scripts/prepare-bistro-region.mjs`, `scripts/prepare-bistro-hdri.mjs`, `scripts/repair-bistro-materials.mjs`, `scripts/optimize-bistro-textures.mjs`, `research/analyze-bistro.mjs`, `research/analyze-walkability.mjs`. Build-time input glTF, GLB, BIN and KTX2 binary files remain in the working sandbox, not on GitHub; source is from [qian-o/GLTF-Assets](https://github.com/qian-o/GLTF-Assets).
+
+**Reproduction outline (authorized source, local environment):**
+1. Clone upstream `qian-o/GLTF-Assets` to `research/large-bistro` using `GIT_LFS_SKIP_SMUDGE=1`, then `git lfs pull --include=Bistro/BistroExterior.bin --exclude=`.
+2. Run `node research/analyze-bistro.mjs` to generate the bounding-box index.
+3. Run `node scripts/prepare-bistro-region.mjs`, `node scripts/repair-bistro-materials.mjs`.
+4. Install Khronos KTX Software v4.4.2 binary in `research/tools/ktx/KTX-Software-4.4.2-Linux-x86_64/bin/ktx` and run `node scripts/optimize-bistro-textures.mjs` (10+ minutes on 2 vCPU) and `node scripts/prepare-bistro-hdri.mjs`.
+5. Copy Three.js `basis_transcoder.js` and `.wasm` into `public/basis` and run `npm run build`. The stage-1 app remains unchanged at `/`; the asset inspector is `/dev/bistro`.
+
+**Release gate remains closed.** Do not publish the existing assets as an approved game until a visual pass, surface-aware collision/navigation, and mobile validation succeed.
