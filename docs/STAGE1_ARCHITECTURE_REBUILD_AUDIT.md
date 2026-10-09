@@ -52,3 +52,19 @@ Do not buy anything until the user approves an exact licensed asset.
 A production rebuild cannot begin until a qualified warehouse interior has actual valid files. Only then: inspect source mesh hierarchy, confirm metric scale / UVs, require connected shell/floor/roof/door/window geometry, retain existing R3F renderer, implement surface-aware placement, tune PBR then lights, validate blockers, capture six actual browser screenshots, profile actual device, and publish a separate preview without overwriting the rejected production scene.
 
 **Acceptance:** Not ready. No new preview is being represented as a finished room.
+
+## Baseline automated checks on the *rejected* scene
+
+Executed on the existing Vercel Sandbox at the time of this audit:
+
+- `npm run validate:assets`: exit code **0**, verified **13 existing GLBs**, approximately **23 MB** on disk.
+- `npm run validate:placement`: exit code **0**, reported **55 existing placements**, **0 issues**.
+- `npm run validate:world`: exit code **0**, reported **32 facade wall modules**, **1 doorway** and **9 floor props**, **0 issues**.
+
+**These exits do not indicate a correct room.** They prove the current validators have an art-direction and geometry-coverage gap: all pass while the actual project still uses planar floor and ceiling, facade wall modules, incomplete openings and unvalidated contact/collisions. All asset requirements above remain BLOCKER.
+
+Additional download access checks: Sketchfab click on Download 3D Model opened a sign-in dialog. The independently published CC-BY GLB listing at e-freeshop also redirected to account login, and its direct file endpoint responded HTTP 401. A separate attempt to load Fab in headless Chromium encountered HTTP 403. No GLB for the replacement interior was acquired.
+
+## Additional paid alternative with explicit conversion risk
+
+[Fab — Warehouse Big Pack by lyoshko](https://www.fab.com/listings/ff6df3b8-b366-4dcc-9f55-8b75a6ad3ca2?lang=en) — **from US$54.99** for the relevant listed license tier; contains extensive coordinated structure, racking, cargo, stairs and more. However the listing exposes an **Unreal Engine** format, not a verified independent FBX/GLB download, so it is **not preferred for the Three.js target** until exact source-file portability is established. No purchase was made.
