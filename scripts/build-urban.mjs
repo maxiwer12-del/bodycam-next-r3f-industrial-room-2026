@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 const here=process.cwd(),source=path.join(here,'research/large-bistro'),outputs=path.join(here,'public/maps/bistro-zone');
 const run=(bin,args,timeout=180000)=>{console.log('RUN',bin,...args);execFileSync(bin,args,{stdio:'inherit',timeout,env:{...process.env,GIT_LFS_SKIP_SMUDGE:'1'}})};
 const present=(file,bytes)=>fs.existsSync(file)&&fs.statSync(file).size>bytes;
@@ -11,7 +12,14 @@ if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(ou
   run('git',['clone','--depth','1','--filter=blob:none','https://github.com/qian-o/GLTF-Assets.git',source],400000);
  }
  if(!present(path.join(source,'Bistro/BistroExterior.bin'),100000000)){
-  run('git',['-C',source,'lfs','pull','--include=Bistro/BistroExterior.bin','--exclude='],360000);
+  const bin=path.join(source,'Bistro/BistroExterior.bin');
+  run('curl',['-fLsS','--retry','4','--max-time','600',
+   'https://media.githubusercontent.com/media/qian-o/GLTF-Assets/main/Bistro/BistroExterior.bin',
+   '-o',bin],650000);
+  if(!present(bin,100000000))throw Error('Official Bistro geometry source download failed');
+  const sha=createHash('sha256').update(fs.readFileSync(bin)).digest('hex');
+  if(sha!=='46f97557874e1441b998c611314a755f9a3a4d52e5d405330edca5ac176cacdc')
+    throw Error('Downloaded source binary checksum mismatch');
  }
  run('node',['research/analyze-bistro.mjs'],90000);
  run('node',['scripts/prepare-bistro-region.mjs'],150000);
