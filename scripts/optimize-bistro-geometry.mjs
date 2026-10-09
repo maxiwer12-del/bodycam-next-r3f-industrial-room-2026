@@ -1,0 +1,25 @@
+import {NodeIO}from'@gltf-transform/core';
+import{ALL_EXTENSIONS}from'@gltf-transform/extensions';
+import{dedup,flatten,join,prune,getBounds}from'@gltf-transform/functions';
+import{PropertyType}from'@gltf-transform/core';
+import fs from'fs';
+const src='public/maps/bistro-zone/scene.gltf',dst='public/maps/bistro-zone/scene-merged.gltf';
+const io=new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const doc=await io.read(src);
+const info=()=>({nodes:doc.getRoot().listNodes().length,meshes:doc.getRoot().listMeshes().length,primitives:doc.getRoot().listMeshes().reduce((s,m)=>s+m.listPrimitives().length,0),materials:doc.getRoot().listMaterials().length,textures:doc.getRoot().listTextures().length,bounds:getBounds(doc.getRoot().listScenes()[0])});
+console.log('BEFORE',JSON.stringify(info()));
+const a=Date.now();
+await doc.transform(dedup({propertyTypes:[PropertyType.MATERIAL]}),flatten(),join({keepNamed:false}),prune());
+console.log('AFTER',JSON.stringify(info()),'durationSec',Math.round((Date.now()-a)/1000));
+const directory='public/maps/bistro-zone';
+const sourceBuffer=directory+'/BistroExterior.bin';
+const backup=directory+'/BistroExterior.source-backup.bin';
+fs.copyFileSync(sourceBuffer,backup);
+await io.write(dst,doc);
+fs.renameSync(sourceBuffer,directory+'/BistroMerged.bin');
+fs.renameSync(backup,sourceBuffer);
+const merged=JSON.parse(fs.readFileSync(dst,'utf8'));
+merged.buffers[0].uri='BistroMerged.bin';
+fs.writeFileSync(dst,JSON.stringify(merged));
+console.log('SAVED',dst,fs.statSync(dst).size);
+
