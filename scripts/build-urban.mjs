@@ -3,25 +3,14 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 const here=process.cwd(),source=path.join(here,'research/large-bistro'),outputs=path.join(here,'public/maps/bistro-zone');
-const TRACE_URL='https://sb-4lgb8uv9k2ar.vercel.run/diag/urban-map-stage1-pipeline-6ce9';
-function trace(stage,status,detail=''){
- try{
-  execFileSync('curl',['-sS','-f','-m','8','-X','POST','-H','Content-Type: application/json','--data-binary','@-',TRACE_URL],{
-   input:JSON.stringify({stage,status,detail:String(detail).slice(-3800),at:Date.now()}),stdio:'pipe',timeout:10000
-  });
- }catch{/* A failed telemetry call must never break the asset build. */}
-}
 const run=(bin,args,timeout=180000)=>{
- const stage=bin+' '+args.slice(0,2).join(' ');
- console.log('RUN',bin,...args);trace(stage,'started');
- try{
+ console.log('RUN',bin,...args);
+ try {
   const output=execFileSync(bin,args,{stdio:['ignore','pipe','pipe'],maxBuffer:16*1024*1024,timeout,env:{...process.env,GIT_LFS_SKIP_SMUDGE:'1'}});
-  if(output?.length)console.log(output.toString('utf8').slice(-6200));
-  trace(stage,'finished',output?.toString('utf8').slice(-480)||'');
- }catch(e){
-  const detail='stdout: '+String(e.stdout||'').slice(-1700)+' stderr: '+String(e.stderr||'').slice(-3500)+' exit: '+e.status+' signal: '+e.signal;
+  if(output?.length)console.log(output.toString('utf8').slice(-6500));
+ } catch(e) {
+  const detail='stdout: '+String(e.stdout||'').slice(-1800)+' stderr: '+String(e.stderr||'').slice(-3800)+' exit: '+e.status+' signal: '+e.signal;
   console.error('ASSET_PIPELINE_STEP_FAILED',detail);
-  trace(stage,'failed',detail);
   throw e;
  }
 };
