@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && next build",
+    "build": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && node scripts/trace-next.mjs",
     "start": "next start",
     "lint": "eslint",
     "validate:assets": "node scripts/validate-urban.mjs",
