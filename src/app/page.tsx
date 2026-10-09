@@ -1,1 +1,1 @@
-import Experience from '@/game/Experience';export default function Home(){return <Experience/>}
+import BistroExperience from '@/game/BistroExperience';export default function Home(){return <BistroExperience/>}
