@@ -18,7 +18,7 @@ export default function InspectionLab(){
  <p style={{fontSize:11}}>CC0 · Poly Haven · {(asset.bytes/1e6).toFixed(2)} MB</p>
  <a href={asset.source} style={{fontSize:11,color:'#dac19f'}} target="_blank">SOURCE ↗</a>
  <h4 style={{color:'#dec29f',fontSize:11,marginTop:25}}>GEOMETRY / {names.length} MESHES</h4>
- {names.map(n=><p key={n} style={{fontSize:10,color:'#c2c9c4',borderBottom:'1px solid #344',paddingBottom:7}}>{n}<br/><b>{asset.bounds[n].dimensions.map(v=>v.toFixed(2)).join(' × ')} m</b></p>)}
+ {names.map(n=><p key={n} style={{fontSize:10,color:'#c2c9c4',borderBottom:'1px solid #344',paddingBottom:7}}>{n}<br/><b>{(asset.bounds as unknown as Record<string,{dimensions:number[]}>)[n].dimensions.map(v=>v.toFixed(2)).join(' × ')} m</b></p>)}
  </aside>
  <section style={{flex:1,position:'relative'}}>
  <Canvas key={id} camera={{position:[3,2.5,5],fov:55,near:.03,far:200}} gl={{antialias:true}}>
