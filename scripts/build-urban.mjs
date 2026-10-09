@@ -37,7 +37,7 @@ if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(ou
   const dir=path.join(here,'research/tools/ktx');fs.mkdirSync(dir,{recursive:true});
   const tmp='/tmp/ktx-4.4.2.tar.bz2';
   run('curl',['-fLsS','--retry','3','--max-time','180','https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Linux-x86_64.tar.bz2','-o',tmp],205000);
-  run('tar',['-xjf',tmp,'-C',dir],60000);
+  run('python3',['-c','import tarfile,sys;tarfile.open(sys.argv[1],"r:bz2").extractall(sys.argv[2])',tmp,dir],45000);
  }
  run('node',['scripts/optimize-bistro-textures.mjs'],650000);
  run('node',['scripts/fix-bistro-tiny-normals.mjs'],120000);
