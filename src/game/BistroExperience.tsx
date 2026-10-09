@@ -56,8 +56,8 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   hdr.load('/maps/bistro-zone/san_giuseppe_1k.hdr',(env)=>{
    if(disposed){env.dispose();return}
    rootTexture.current=env;env.mapping=THREE.EquirectangularReflectionMapping;
-   scene.environment=env;scene.environmentIntensity=1.1;
-   scene.background=env;scene.backgroundIntensity=.42;
+   scene.environment=env;scene.environmentIntensity=.62;
+   scene.background=env;scene.backgroundIntensity=.55;
   },undefined,(error)=>console.warn('ENVIRONMENT_WARNING',error));
   onStatus('Загрузка городской карты · GLTF + KTX2...');
   const started=performance.now();
@@ -77,10 +77,10 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
     if(!used.has(mat)){
       used.add(mat);
       if(mat instanceof THREE.MeshStandardMaterial){
-       mat.envMapIntensity=1.1;
-       if(mat.normalMap)mat.normalScale.y*=-1;
-       if(/brick|concrete|stone|pavement|wood|ground|roof|cobble|plaster/i.test(name))mat.roughness=Math.max(.84,mat.roughness);
-       if(/foliage|leaf|hedge|flower/.test(name)){mat.roughness=Math.max(.78,mat.roughness);mat.metalness=0;}
+       mat.envMapIntensity=.72;
+       if(mat.normalMap)mat.normalScale.y*=-1; // Original DirectX normals; glTF uses OpenGL.
+       // Preserve artist-authored PBR roughness instead of globally overriding it.
+       // Metalness/roughness channels must be validated at asset conversion.
        mat.needsUpdate=true;
       }
     }
@@ -187,8 +187,8 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   }
  });
  return <>
- <hemisphereLight intensity={2.05} color="#f0f3ff" groundColor="#b0a19a"/>
- <directionalLight position={[14,30,-10]} intensity={3.2} color="#fff3e2"
+ <hemisphereLight intensity={.65} color="#f0f3ff" groundColor="#b0a19a"/>
+ <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
  castShadow={quality==='Cinematic Max'}
  shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18}
  shadow-camera-near={.8} shadow-camera-far={95} shadow-mapSize={[2048,2048]} shadow-bias={-.0001}/>
@@ -231,7 +231,7 @@ export default function BistroExperience(){
  const fullscreen=()=>document.documentElement.requestFullscreen?.().catch(()=>{});
  return <main style={{position:'fixed',inset:0,overflow:'hidden',touchAction:'none',background:'#172027',fontFamily:'Arial,Helvetica,sans-serif',color:'#fff'}}>
  {entered?<Canvas key={quality} shadows={quality==='Cinematic Max'} dpr={quality==='Cinematic Max'?(typeof window!=='undefined'?window.devicePixelRatio:1):Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
- camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:1.32,outputColorSpace:THREE.SRGBColorSpace}}
+ camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
  onCreated={({gl,scene})=>{gl.setClearColor(0x95a3a7);scene.background=new THREE.Color('#aab9bc');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Попробуй перезапустить сцену.')});}}>
  <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
