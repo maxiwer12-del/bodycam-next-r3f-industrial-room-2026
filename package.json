@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && node scripts/trace-next.mjs",
+    "build": "node scripts/download-prebuilt-assets.mjs && node scripts/validate-urban.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "validate:assets": "node scripts/validate-urban.mjs",
     "validate:placement": "node research/analyze-walkability.mjs && node scripts/validate-urban-world.mjs",
     "validate:world": "node research/analyze-walkability.mjs && node scripts/validate-urban-world.mjs",
     "test:e2e": "node research/validate-urban-e2e.mjs chromium",
-    "test:e2e:safari": "node research/validate-urban-e2e.mjs webkit"
+    "test:e2e:safari": "node research/validate-urban-e2e.mjs webkit",
+    "build:assets": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && node scripts/trace-next.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
