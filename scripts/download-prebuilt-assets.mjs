@@ -28,7 +28,7 @@ for(let attempt=0;!downloaded&&attempt<4;attempt++){
 if(!downloaded)throw Error('Asset release download failed');
 const compressed=fs.readFileSync(temp);
 const actualHash=createHash('sha256').update(compressed).digest('hex');
-const expectedHash=process.env.BODYCAM_BUNDLE_SHA256;
+const expectedHash='6cc76c3e7aad712272c231b80ea4b69351df16d9b42ea0926ffa29864539178c';
 if(expectedHash&&actualHash!==expectedHash)throw Error('Asset archive SHA-256 does not match pinned manifest');
 console.log('ARCHIVE_RECEIVED',compressed.length,'SHA256',actualHash);
 const bytes=zlib.gunzipSync(compressed,{maxOutputLength:600000000});
