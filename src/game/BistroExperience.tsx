@@ -103,8 +103,9 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
    colliders.current=physics;
    if(new URLSearchParams(window.location.search).has('qa')){
     (window as unknown as {__URBAN_QA__?:unknown}).__URBAN_QA__={
-      camera:()=>camera.position.toArray(),colliders:physics.length,
-      meshCount:count,loadedAt:Date.now()
+      camera:()=>camera.position.toArray(),
+      heading:()=>({yaw:rotation.current.yaw,pitch:rotation.current.pitch}),
+      colliders:physics.length,meshCount:count,loadedAt:Date.now()
     };
    }
    camera.position.copy(START);
@@ -239,6 +240,7 @@ export default function BistroExperience(){
  <p style={{fontSize:12,letterSpacing:'.16em',opacity:.78,textAlign:'center'}}>URBAN BLOCK / ART TEST 01 · NO WEAPONS · NO MULTIPLAYER</p>
  <button onClick={()=>{setEntered(true);setError('');setLoading('Инициализация сцены…')}} style={{border:0,background:'#e4c39a',color:'#212527',padding:'17px 29px',marginTop:20,fontWeight:800,letterSpacing:'.15em',cursor:'pointer'}}>ВОЙТИ НА КАРТУ →</button>
  <p style={{fontSize:10,opacity:.6,marginTop:35}}>На телефоне: левый стик — ходьба, справа — обзор. На ПК: WASD и мышь.</p>
+ <p style={{fontSize:10,opacity:.6,marginTop:6,textAlign:'center',lineHeight:1.7}}>3D-окружение: <a href="https://developer.nvidia.com/orca/amazon-lumberyard-bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Amazon Lumberyard Bistro</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC BY 4.0</a><br/>glTF/KTX2: <a href="https://github.com/qian-o/GLTF-Assets/tree/main/Bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>qian-o</a> · адаптировано и оптимизировано для веба</p>
  </div>}
  {entered&&<><LookPad look={look}/><JoyStick value={stick}/>
  <div style={{position:'absolute',left:'max(16px,env(safe-area-inset-left))',top:'max(12px,env(safe-area-inset-top))',zIndex:30,fontSize:11,textShadow:'0 2px 8px #000'}}>
