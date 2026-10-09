@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {carveBistroEntrance} from './BistroDoorway';
+import {batchBistroStaticGeometry} from './BistroStaticBatcher';
 
 export interface BistroChunk {
  id:string;
@@ -19,7 +20,7 @@ export interface BistroManifest {
  exterior:BistroChunk[];
  interior:BistroChunk;
 }
-type Loaded = {root:THREE.Group;physics:boolean};
+type Loaded = {root:THREE.Group;visuals:THREE.Group;physics:boolean};
 type Entry = {asset:BistroChunk;box:THREE.Box3;isInterior:boolean};
 export type StreamTelemetry={
  state:'loading'|'ready'|'error';
@@ -114,7 +115,10 @@ export class BistroSpatialStream {
    this.scene.add(group);
    group.updateMatrixWorld(true);
    if(entry.isInterior)console.info('BISTRO_INTERIOR_ENTRY_GEOMETRY',JSON.stringify(carveBistroEntrance(group)));
-   this.active.set(id,{root:group,physics:false});
+   const optimized=batchBistroStaticGeometry(group);
+   this.scene.add(optimized.visuals);
+   this.active.set(id,{root:group,visuals:optimized.visuals,physics:false});
+   console.info('BISTRO_SPATIAL_BATCH_RESULT',id,JSON.stringify(optimized.report));
    this.telemetry.completedMeshCount+=entry.asset.meshCount;
    console.info('BISTRO_CHUNK_LOADED',id,entry.asset.meshCount,entry.asset.geometryBytes);
   },undefined,error=>{
@@ -153,7 +157,8 @@ export class BistroSpatialStream {
     const mayUnload=entry.isInterior?interiorDistance>65:distance>UNLOAD_DIST;
     if(mayUnload&&!isDesired){
       if(current.physics)this.physics(entry.asset.id,current.root,false);
-      this.scene.remove(current.root);disposeGroup(current.root);this.active.delete(entry.asset.id);
+      this.scene.remove(current.root);this.scene.remove(current.visuals);
+      disposeGroup(current.visuals);disposeGroup(current.root);this.active.delete(entry.asset.id);
       console.info('BISTRO_CHUNK_UNLOADED',entry.asset.id);
     }
    }
@@ -166,7 +171,7 @@ export class BistroSpatialStream {
   this.stop=true;
   for(const [id,item]of this.active){
    if(item.physics)this.physics(id,item.root,false);
-   this.scene.remove(item.root);disposeGroup(item.root);
+   this.scene.remove(item.root);this.scene.remove(item.visuals);disposeGroup(item.visuals);disposeGroup(item.root);
   }
   this.active.clear();this.entries=[];
  }
