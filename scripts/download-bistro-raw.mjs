@@ -44,7 +44,7 @@ const hdr=path.join(dir,'san_giuseppe_bridge_4k.hdr');
 if(!fs.existsSync(hdr)||fs.statSync(hdr).size<10000000)await download(base+'san_giuseppe_bridge_4k.hdr',hdr,'hdri');
 const paths=[...new Set(gltf.images.map(i=>i.uri))];
 let next=0,done=0,bytes=0,errors=[];
-const concurrency=8;
+const concurrency=12;
 async function worker(){
  while(next<paths.length){
   const uri=paths[next++];
