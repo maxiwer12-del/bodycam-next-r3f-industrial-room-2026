@@ -14,7 +14,8 @@ if(valid()){console.log('PREPARED_ASSETS_PRESENT');process.exit(0)}
 const url='https://github.com/maxiwer12-del/bodycam-next-r3f-industrial-room-2026/releases/download/urban-bistro-assets-v1/urban-bistro-web-assets-v1.tar.gz';
 const temp='/tmp/bodycam-urban-bistro-assets-v1.tar.gz';
 let downloaded=false;
-for(let attempt=0;attempt<4;attempt++){
+if(process.env.BODYCAM_BUNDLE_LOCAL){fs.copyFileSync(process.env.BODYCAM_BUNDLE_LOCAL,temp);downloaded=true;console.log('USING_LOCAL_TEST_ARCHIVE')}
+for(let attempt=0;!downloaded&&attempt<4;attempt++){
  try{
   console.log('FETCH_LICENSED_ASSETS',attempt+1,url);
   const r=await fetch(url,{redirect:'follow',headers:{'User-Agent':'BodycamNext-AssetRelease/1.0'},signal:AbortSignal.timeout(120000)});
