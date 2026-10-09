@@ -20,7 +20,7 @@ export function batchBistroStaticGeometry(root:THREE.Group):{
   report.sourceMeshes++;
   const mesh=node,geometry=mesh.geometry;
   const mat=Array.isArray(mesh.material)?null:mesh.material;
-  if(!mat||!geometry||geometry.morphAttributes?.position?.length||geometry.groups.length>1||mesh.isSkinnedMesh){
+  if(!mat||!geometry||geometry.morphAttributes?.position?.length||geometry.groups.length>1||mesh instanceof THREE.SkinnedMesh){
    report.retainedMeshes++;return;
   }
   const physical=mat instanceof THREE.MeshPhysicalMaterial;
@@ -28,8 +28,8 @@ export function batchBistroStaticGeometry(root:THREE.Group):{
      mat.side===THREE.DoubleSide||(physical&&mat.transmission>0)){
    report.retainedMeshes++;return;
   }
-  const attrs=Object.entries(geometry.attributes);
-  if(attrs.some(([,a])=>a.isInterleavedBufferAttribute||a.itemSize<=0)){
+  const attrs=Object.entries(geometry.attributes) as [string,THREE.BufferAttribute][];
+  if(attrs.some(([,a])=>('isInterleavedBufferAttribute' in a)||a.itemSize<=0)){
    report.retainedMeshes++;return;
   }
   const signature=attrs.map(([name,a])=>name+':'+a.itemSize+':'+a.normalized+':'+a.array.constructor.name).sort().join('|');
