@@ -4,6 +4,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 import {MeshBVH,acceleratedRaycast} from 'three-mesh-bvh';
+import {BistroSpatialStream} from './BistroSpatialStream';
+import {carveBistroEntrance} from './BistroDoorway';
 import {useState,useEffect,useRef,useCallback} from 'react';
 import * as THREE from 'three';
 
@@ -12,7 +14,6 @@ type Axis={x:number;y:number};
 type Metrics={fps:number;calls:number;triangles:number;gpu:'WebGL2'|'WebGL1';meshes:number};
 type Collider={mesh:THREE.Mesh;box:THREE.Box3;solid:boolean};
 const START=new THREE.Vector3(-9,2.08,6);
-const MAX_DISTANCE=13;
 const PLAYER_HEIGHT=1.7;
 const PLAYER_RADIUS=.3;
 
@@ -23,6 +24,8 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
 }){
  const {camera,gl,scene}=useThree();
  const world=useRef<THREE.Group|null>(null);
+ const streamed=useRef<BistroSpatialStream|null>(null);
+ const streamedPhysics=useRef(new Map<string,Collider[]>());
  const colliders=useRef<Collider[]>([]);
  const rotation=useRef({yaw:0,pitch:0});
  const keys=useRef(new Set<string>());
@@ -52,6 +55,36 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   const transcoder=new KTX2Loader().setTranscoderPath('/basis/').setWorkerLimit(2);
   transcoder.detectSupport(gl);
   const renderer=new GLTFLoader().setKTX2Loader(transcoder);
+  const physicsForChunk=(id:string,group:THREE.Group,register:boolean)=>{
+    const previous=streamedPhysics.current.get(id);
+    if(previous){
+      const old=new Set(previous);
+      colliders.current=colliders.current.filter(c=>!old.has(c));
+      streamedPhysics.current.delete(id);
+    }
+    if(!register)return;
+    const created:Collider[]=[];
+    group.updateMatrixWorld(true);
+    group.traverse(node=>{
+      if(!(node instanceof THREE.Mesh))return;
+      const mat=Array.isArray(node.material)?node.material[0]:node.material;
+      const name=(mat?.name||'').toLowerCase();
+      if(/foliage|leaf|flower|glass|decals|smoke|water|roadmark|shadow|paper|signage/.test(name))return;
+      const box=new THREE.Box3().setFromObject(node);
+      if(box.isEmpty()||box.getSize(new THREE.Vector3()).lengthSq()<.001)return;
+      const proxy=new THREE.Mesh(node.geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+      proxy.matrixAutoUpdate=false;proxy.matrix.copy(node.matrixWorld);proxy.matrixWorld.copy(node.matrixWorld);
+      proxy.raycast=acceleratedRaycast;
+      const geo=node.geometry as THREE.BufferGeometry&{boundsTree?:MeshBVH};
+      if(!geo.boundsTree)try{geo.boundsTree=new MeshBVH(geo,{maxLeafTris:24});}catch(err){console.warn('SPATIAL_BVH_FAILED',id,err);return}
+      created.push({mesh:proxy,box,solid:true});
+    });
+    streamedPhysics.current.set(id,created);
+    colliders.current.push(...created);
+  };
+  const city=new BistroSpatialStream({loader:renderer,scene,quality,onPhysics:physicsForChunk});
+  streamed.current=city;
+  void city.init();
   const hdr=new HDRLoader();
   hdr.load('/maps/bistro-zone/san_giuseppe_1k.hdr',(env)=>{
    if(disposed){env.dispose();return}
@@ -65,9 +98,11 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
    if(disposed)return;
    world.current=gltf.scene;scene.add(gltf.scene);
    gltf.scene.updateMatrixWorld(true);
+   const doorway=carveBistroEntrance(gltf.scene);
+   console.info('BISTRO_CORE_ENTRY_GEOMETRY',JSON.stringify(doorway));
    let count=0;
    const used=new Set<THREE.Material>();
-   const region=new THREE.Box3(new THREE.Vector3(-MAX_DISTANCE,-4,-MAX_DISTANCE),new THREE.Vector3(MAX_DISTANCE,20,MAX_DISTANCE));
+   const region=new THREE.Box3(new THREE.Vector3(-125,-10,-125),new THREE.Vector3(125,60,125));
    const physics:Collider[]=[];
    gltf.scene.traverse(node=>{
     if(!(node instanceof THREE.Mesh))return;
@@ -78,9 +113,9 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
       used.add(mat);
       if(mat instanceof THREE.MeshStandardMaterial){
        mat.envMapIntensity=.72;
-       if(mat.normalMap)mat.normalScale.y*=-1; // Original DirectX normals; glTF uses OpenGL.
-       // Preserve artist-authored PBR roughness instead of globally overriding it.
-       // Metalness/roughness channels must be validated at asset conversion.
+       if(mat.normalMap)mat.normalScale.y*=-1; // Upstream uses DirectX normal maps; glTF expects OpenGL.
+       // Retain original artist-authored material roughness; do not flatten PBR response.
+       // Original metal/roughness channels are validated during asset conversion.
        mat.needsUpdate=true;
       }
     }
@@ -105,7 +140,10 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
     (window as unknown as {__URBAN_QA__?:unknown}).__URBAN_QA__={
       camera:()=>camera.position.toArray(),
       heading:()=>({yaw:rotation.current.yaw,pitch:rotation.current.pitch}),
-      colliders:physics.length,meshCount:count,loadedAt:Date.now()
+      colliders:physics.length,meshCount:count,loadedAt:Date.now(),
+      spatial:()=>streamed.current?.snapshot()||null,
+      setCamera:(xyz:number[])=>{if(xyz.length===3&&xyz.every(Number.isFinite))camera.position.fromArray(xyz)},
+      setView:(yaw:number,pitch=0)=>{if(Number.isFinite(yaw)&&Number.isFinite(pitch))rotation.current={yaw,pitch}},
     };
    }
    camera.position.copy(START);
@@ -119,6 +157,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   },err=>{onError(String(err));});
   return()=>{
    disposed=true;loadedRef.current=false;ready.current=false;
+   streamed.current?.dispose();streamed.current=null;streamedPhysics.current.clear();
    if(world.current)scene.remove(world.current);
    if(scene.environment===rootTexture.current)scene.environment=null;
    rootTexture.current?.dispose();transcoder.dispose();
@@ -128,6 +167,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  useFrame((_,dt)=>{
   if(!ready.current)return;
   const step=Math.min(dt,.055);
+  streamed.current?.update(camera,step);
   const yaw=rotation.current;
   yaw.yaw-=look.current.x*.003; yaw.pitch=Math.max(-1.38,Math.min(1.38,yaw.pitch-look.current.y*.0028));
   look.current.x=0;look.current.y=0;
@@ -141,7 +181,8 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
    dir.normalize();const delta=step*2.65*magnitude;
    const pos=camera.position;
    const next=candidate.current.copy(pos).addScaledVector(dir,delta);
-   const hasBounds=Math.abs(next.x)<=MAX_DISTANCE&&Math.abs(next.z)<=MAX_DISTANCE;
+   // Imported street/floor triangles now define passability; no invisible 13 m rectangle.
+   const hasBounds=Number.isFinite(next.x)&&Number.isFinite(next.z);
    if(hasBounds){
     let blocked=false;
     // Check two body-height rays against actual imported triangles, using BVH.
