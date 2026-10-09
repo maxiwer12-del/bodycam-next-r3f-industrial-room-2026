@@ -1,0 +1,53 @@
+name: Build licensed urban environment assets
+on:
+  push:
+    branches:
+      - art/bistro-urban-free-map
+    paths:
+      - .github/workflows/publish-urban-assets.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  asset-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      - name: Install game dependencies
+        run: npm install --no-audit --no-fund
+      - name: Prepare licensed Amazon Bistro GLTF/KTX2 environment
+        run: npm run build
+      - name: Verify physical GLTF and textures
+        run: npm run validate:assets
+      - name: Package browser-served 3D assets
+        run: |
+          cat > public/maps/bistro-zone/LICENSE_ASSETS.txt <<'EOF'
+          Amazon Lumberyard Bistro Exterior
+          Original author: Amazon Lumberyard
+          Original source: https://developer.nvidia.com/orca/amazon-lumberyard-bistro
+          Adapted glTF+KTX2 source: https://github.com/qian-o/GLTF-Assets/tree/main/Bistro
+          License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          https://creativecommons.org/licenses/by/4.0/
+          Changes: 32m selection region, PBR channel repairs, static mesh batching,
+          mobile texture conversion with original 2K hero maps preserved, HDR reduction.
+          EOF
+          tar -czf urban-bistro-web-assets-v1.tar.gz -C public maps/bistro-zone basis
+          ls -lh urban-bistro-web-assets-v1.tar.gz
+      - name: Publish static asset bundle without any paid service
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view urban-bistro-assets-v1 >/dev/null 2>&1; then
+            gh release upload urban-bistro-assets-v1 urban-bistro-web-assets-v1.tar.gz --clobber
+          else
+            gh release create urban-bistro-assets-v1 urban-bistro-web-assets-v1.tar.gz \
+              --title "BODYCAM NEXT free urban scene asset bundle v1" \
+              --notes "CC BY 4.0 Amazon Lumberyard Bistro assets; attribution included in archive. Browser-ready glTF and KTX2. Built from the clean asset pipeline." \
+              --target "$GITHUB_SHA"
+          fi
