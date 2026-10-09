@@ -7,20 +7,9 @@ const run=(bin,args,timeout=180000)=>{console.log('RUN',bin,...args);execFileSyn
 const present=(file,bytes)=>fs.existsSync(file)&&fs.statSync(file).size>bytes;
 if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(outputs,'BistroMerged.bin'),10000000)){
  fs.mkdirSync(path.join(here,'research'),{recursive:true});
- if(!present(path.join(source,'Bistro/BistroExterior.gltf'),2000000)){
-  fs.rmSync(source,{recursive:true,force:true});
-  run('git',['clone','--depth','1','--filter=blob:none','https://github.com/qian-o/GLTF-Assets.git',source],400000);
- }
- if(!present(path.join(source,'Bistro/BistroExterior.bin'),100000000)){
-  const bin=path.join(source,'Bistro/BistroExterior.bin');
-  run('curl',['-fLsS','--retry','4','--max-time','600',
-   'https://media.githubusercontent.com/media/qian-o/GLTF-Assets/main/Bistro/BistroExterior.bin',
-   '-o',bin],650000);
-  if(!present(bin,100000000))throw Error('Official Bistro geometry source download failed');
-  const sha=createHash('sha256').update(fs.readFileSync(bin)).digest('hex');
-  if(sha!=='46f97557874e1441b998c611314a755f9a3a4d52e5d405330edca5ac176cacdc')
-    throw Error('Downloaded source binary checksum mismatch');
- }
+ // Download only the assets referenced by the licensed source glTF.
+ // Git cloning the unrelated 1.3 GB upstream repo exceeded Vercel's build window.
+ run('node',['scripts/download-bistro-raw.mjs'],400000);
  run('node',['research/analyze-bistro.mjs'],90000);
  run('node',['scripts/prepare-bistro-region.mjs'],150000);
  run('node',['scripts/repair-bistro-materials.mjs'],45000);
