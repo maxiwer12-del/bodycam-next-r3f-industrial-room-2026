@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';import path from 'node:path';import {NodeIO}from'@gltf-transform/core';import{ALL_EXTENSIONS}from'@gltf-transform/extensions';import{prune,getBounds}from'@gltf-transform/functions';
+const root='research/large-bistro/Bistro';const bounds=JSON.parse(await fs.readFile('research/bistro-bounds.json','utf8'));
+const size=2000,cx=250,cy=150;const range={x:[cx-size/2,cx+size/2],y:[cy-size/2,cy+size/2]};
+const allowed=new Set(bounds.filter(b=>b.boxMax[0]>=range.x[0]&&b.boxMin[0]<=range.x[1]&&b.boxMax[1]>=range.y[0]&&b.boxMin[1]<=range.y[1]).map(b=>b.name));
+const io=new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const doc=await io.read(root+'/BistroExterior.gltf');
+const names=doc.getRoot().listNodes();
+for(const n of names)if(n.getName()!=='BistroExterior'&&!allowed.has(n.getName()))n.dispose();
+const rootNode=names.find(n=>n.getName()==='BistroExterior');
+rootNode?.setTranslation([-cx*.016,0,-cy*.016]);
+await doc.transform(prune());
+const size0=doc.getRoot().listNodes().length;
+const b=getBounds(doc.getRoot().listScenes()[0]);
+const output='public/maps/bistro-zone';
+await fs.mkdir(output,{recursive:true});
+await io.write(output+'/scene.gltf',doc);
+const stats={source:'Amazon Lumberyard Bistro - Exterior',sourceUrl:'https://developer.nvidia.com/orca/amazon-lumberyard-bistro',convertSource:'https://github.com/qian-o/GLTF-Assets',license:'CC-BY-4.0',authors:['Amazon Lumberyard','qian-o (glTF/KTX2)'],cropSourceUnits:{center:[cx,cy],halfExtent:size/2,scaleToMetres:0.016},zoneBoundsMetres:{size:size*.016,min:b.min,max:b.max},gltfNodes:size0,meshes:doc.getRoot().listMeshes().length,materials:doc.getRoot().listMaterials().length,textures:doc.getRoot().listTextures().length,files:(await fs.readdir(output)).length};
+await fs.writeFile(output+'/level-sourcemap.json',JSON.stringify(stats,null,2));
+let total=0;for(const f of await fs.readdir(output)){let v=(await fs.stat(path.join(output,f))).size;total+=v}console.log('BISTRO REGION',JSON.stringify(stats));console.log('OUTPUT BYTES',total,'MB',(total/1e6).toFixed(1));
+
