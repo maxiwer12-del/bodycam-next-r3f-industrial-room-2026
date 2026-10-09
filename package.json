@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "python3 scripts/download.py && node scripts/prepare.mjs && node scripts/layout.mjs && node scripts/materials.mjs && node scripts/optimize.mjs && next build",
+    "build": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && next build",
     "start": "next start",
     "lint": "eslint",
-    "validate:assets": "node scripts/validate-assets.mjs",
+    "validate:assets": "node scripts/validate-urban.mjs",
     "validate:placement": "node scripts/validate-placement.mjs",
     "validate:world": "node scripts/validate-world.mjs",
-    "test:e2e": "node scripts/browser-capture.mjs"
+    "test:e2e": "node research/validate-urban-e2e.mjs chromium",
+    "test:e2e:safari": "node research/validate-urban-e2e.mjs webkit"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
@@ -18,7 +19,8 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "three-mesh-bvh": "^0.9.2"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.5.1",
