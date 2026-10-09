@@ -12,7 +12,7 @@ const jobs=[];
 const preserveSource=(file)=>/^(Pavement_(Cobblestone_02|Ground_Wet)|MASTER_(Concrete_Smooth|Brick_Small_Red))_(BaseColor|Normal)\.ktx2$/i.test(file);
 for(const file of files){const stat=await fs.stat(path.join(root,file));if(stat.size>950000&&!preserveSource(file))jobs.push({file,size:stat.size});}
 jobs.sort((a,b)=>b.size-a.size);
-const maxWorkers=Number(process.env.BISTRO_TEXTURE_WORKERS||2);
+const maxWorkers=Number(process.env.BISTRO_TEXTURE_WORKERS||(process.env.VERCEL?'1':'2'));
 if(!Number.isInteger(maxWorkers)||maxWorkers<1||maxWorkers>4)throw Error('Invalid worker setting');
 console.log('OPT_PLAN',jobs.length,'assets',Math.round(jobs.reduce((s,j)=>s+j.size,0)/1e6),'inputMB','parallelWorkers',maxWorkers);
 
