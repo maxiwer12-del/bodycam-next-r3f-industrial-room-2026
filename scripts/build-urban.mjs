@@ -30,7 +30,8 @@ if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(ou
   run('curl',['-fLsS','--retry','3','--max-time','180','https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Linux-x86_64.tar.bz2','-o',tmp],205000);
   run('tar',['-xjf',tmp,'-C',dir],60000);
  }
- run('node',['scripts/optimize-bistro-textures.mjs'],1200000);
+ run('node',['scripts/optimize-bistro-textures.mjs'],650000);
+ run('node',['scripts/fix-bistro-tiny-normals.mjs'],120000);
  run('node',['scripts/prepare-bistro-hdri.mjs'],90000);
  run('node',['--max-old-space-size=3072','scripts/optimize-bistro-geometry.mjs'],180000);
 }
