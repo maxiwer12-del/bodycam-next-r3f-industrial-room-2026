@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "validate:assets": "node scripts/validate-urban.mjs",
-    "validate:placement": "node scripts/validate-placement.mjs",
-    "validate:world": "node scripts/validate-world.mjs",
+    "validate:placement": "node research/analyze-walkability.mjs && node scripts/validate-urban-world.mjs",
+    "validate:world": "node research/analyze-walkability.mjs && node scripts/validate-urban-world.mjs",
     "test:e2e": "node research/validate-urban-e2e.mjs chromium",
     "test:e2e:safari": "node research/validate-urban-e2e.mjs webkit"
   },
