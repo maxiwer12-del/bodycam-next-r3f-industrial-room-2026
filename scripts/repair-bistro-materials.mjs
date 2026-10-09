@@ -10,7 +10,8 @@ for(const material of g.materials||[]){
   if(!uri.endsWith('_Specular.ktx2'))continue;
   material.pbrMetallicRoughness ||= {};
   material.pbrMetallicRoughness.metallicRoughnessTexture={index:packed.index};
-  material.occlusionTexture={index:packed.index,strength:1};
+  // _Specular red is black in the source pack, NOT valid AO; mapping it to occlusion caused dark/black geometry.
+  delete material.occlusionTexture;
   delete material.extensions.KHR_materials_specular;
   if(!Object.keys(material.extensions).length)delete material.extensions;
   modified++;
