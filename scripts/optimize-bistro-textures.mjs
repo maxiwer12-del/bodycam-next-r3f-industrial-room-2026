@@ -16,7 +16,7 @@ const maxWorkers=Number(process.env.BISTRO_TEXTURE_WORKERS||(process.env.VERCEL?
 if(!Number.isInteger(maxWorkers)||maxWorkers<1||maxWorkers>4)throw Error('Invalid worker setting');
 console.log('OPT_PLAN',jobs.length,'assets',Math.round(jobs.reduce((s,j)=>s+j.size,0)/1e6),'inputMB','parallelWorkers',maxWorkers);
 
-const essential=(name)=>/(Pavement|Concrete|Brick).*BaseColor/i.test(name);
+const essential=(name)=>false; // Key 2K hero PBR maps are preserved untouched by preserveSource().
 const allowed=process.env.BISTRO_TEXTURE_MODE||'hybrid';
 if(!['hybrid','uastc','basis-lz'].includes(allowed))throw Error('Invalid mode '+allowed);
 let next=0,converted=0,savedBytes=0,failure=[],byCodec={'uastc':0,'basis-lz':0};
