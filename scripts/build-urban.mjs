@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 const here=process.cwd(),source=path.join(here,'research/large-bistro'),outputs=path.join(here,'public/maps/bistro-zone');
 const run=(bin,args,timeout=180000)=>{console.log('RUN',bin,...args);execFileSync(bin,args,{stdio:'inherit',timeout,env:{...process.env,GIT_LFS_SKIP_SMUDGE:'1'}})};
 const present=(file,bytes)=>fs.existsSync(file)&&fs.statSync(file).size>bytes;
-if(!present(path.join(outputs,'scene-merged.gltf'),200000)||!present(path.join(outputs,'BistroMerged.bin'),10000000)){
+if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(outputs,'BistroMerged.bin'),10000000)){
  fs.mkdirSync(path.join(here,'research'),{recursive:true});
  if(!present(path.join(source,'Bistro/BistroExterior.gltf'),2000000)){
   fs.rmSync(source,{recursive:true,force:true});
@@ -32,7 +32,7 @@ for(const f of ['basis_transcoder.js','basis_transcoder.wasm']){
  if(!fs.existsSync(src))throw Error('Missing Basis transcoder '+src);
  fs.copyFileSync(src,path.join(here,'public/basis',f));
 }
-if(!present(path.join(outputs,'scene-merged.gltf'),200000)||!present(path.join(outputs,'BistroMerged.bin'),10000000)){
+if(!present(path.join(outputs,'scene-merged.gltf'),50000)||!present(path.join(outputs,'BistroMerged.bin'),10000000)){
  throw Error('Missing prepared urban glTF or geometry buffer');
 }
 console.log('URBAN_BUILD_READY',fs.readdirSync(outputs).length,fs.statSync(path.join(outputs,'BistroMerged.bin')).size);
