@@ -60,8 +60,8 @@ export function BistroCombat({trigger,reload,onStatus}:{trigger:React.RefObject<
   <mesh material={sleeve} position={[.18,-.37,.28]} rotation={[0,0,.34]}><capsuleGeometry args={[.115,.23,5,8]}/></mesh>
  </group>
  {targets.map((t,i)=><group key={i} position={targetSpots[i]} rotation={[0,0,-t.fall*1.45]}>
-  <mesh userData={{trainingTarget:i}} material={new THREE.MeshStandardMaterial({color:t.hit>0?0xa44d3a:0x5d655a,roughness:.9})} position={[0,1.04,0]}>
-   <capsuleGeometry args={[.29,.78,6,10]}/>
+  <mesh userData={{trainingTarget:i}}  position={[0,1.04,0]}>
+   <capsuleGeometry args={[.29,.78,6,10]}/><meshStandardMaterial color={t.hit>0?"#a44d3a":"#5d655a"} roughness={.9}/>
   </mesh>
   <mesh userData={{trainingTarget:i}} position={[0,1.78,0]}>
    <sphereGeometry args={[.19,10,8]}/><meshStandardMaterial color={t.hit>0?'#cf967b':'#a39e90'}/>
