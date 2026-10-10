@@ -6,6 +6,7 @@ import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 import {MeshBVH,acceleratedRaycast} from 'three-mesh-bvh';
 import {BistroSpatialStream} from './BistroSpatialStream';
 import {carveBistroEntrance} from './BistroDoorway';
+import {BistroCombat,type CombatPulse} from './BistroCombat';
 import {useState,useEffect,useRef,useCallback} from 'react';
 import * as THREE from 'three';
 
@@ -17,10 +18,11 @@ const START=new THREE.Vector3(-9,2.08,6);
 const PLAYER_HEIGHT=1.7;
 const PLAYER_RADIUS=.3;
 
-function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRef}:{
+function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRef,fire,reload,onCombat}:{
  stick:React.RefObject<Axis>;look:React.RefObject<Axis>;quality:Quality;
  onStatus:(s:string)=>void;onReady:()=>void;onError:(s:string)=>void;onMetric:(m:Metrics)=>void;
  loadedRef:React.RefObject<boolean>;
+ fire:React.RefObject<number>;reload:React.RefObject<number>;onCombat:(value:CombatPulse)=>void;
 }){
  const {camera,gl,scene}=useThree();
  const qualityRef=useRef(quality);
@@ -231,6 +233,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   }
  });
  return <>
+ <BistroCombat trigger={fire} reload={reload} onStatus={onCombat}/>
  <hemisphereLight intensity={.65} color="#f0f3ff" groundColor="#b0a19a"/>
  <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
  castShadow={quality==='Cinematic Max'}
@@ -262,6 +265,8 @@ function LookPad({look}:{look:React.RefObject<Axis>}){
 }
 export default function BistroExperience(){
  const stick=useRef<Axis>({x:0,y:0}),look=useRef<Axis>({x:0,y:0}),loadedRef=useRef(false);
+ const fire=useRef(0),reload=useRef(0);
+ const [combat,setCombat]=useState<CombatPulse>({shots:0,hits:0,eliminations:0,ammo:12,reserve:60,reload:false});
  const [entered,setEntered]=useState(false),[quality,setQuality]=useState<Quality>('High');
  const [loading,setLoading]=useState(''),[error,setError]=useState('');
  const [stats,setStats]=useState<Metrics>({fps:0,calls:0,triangles:0,gpu:'WebGL2',meshes:0});
@@ -270,6 +275,8 @@ export default function BistroExperience(){
  const fail=useCallback((x:string)=>setError(x),[]);
  const ready=useCallback(()=>setLoading(''),[]);
  const metric=useCallback((m:Metrics)=>setStats(m),[]);
+ const onCombat=useCallback((v:CombatPulse)=>setCombat(v),[]);
+ useEffect(()=>{const shoot=(e:KeyboardEvent)=>{if(e.code==='Space'){fire.current++;e.preventDefault()}};window.addEventListener('keydown',shoot);return()=>window.removeEventListener('keydown',shoot)},[]);
  useEffect(()=>{const check=()=>setLandscape(window.innerWidth>=window.innerHeight);check();window.addEventListener('resize',check);return()=>window.removeEventListener('resize',check)},[]);
  useEffect(()=>{document.body.style.touchAction='none';return()=>{document.body.style.touchAction=''}},[]);
  const fullscreen=()=>document.documentElement.requestFullscreen?.().catch(()=>{});
@@ -277,16 +284,19 @@ export default function BistroExperience(){
  {entered?<Canvas shadows dpr={Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
  camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
  onCreated={({gl,scene})=>{gl.setClearColor(0x95a3a7);scene.background=new THREE.Color('#aab9bc');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
- <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef}/>
+ <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} onCombat={onCombat}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
  <div style={{fontSize:10,letterSpacing:'.32em',opacity:.76}}>AMAZON LUMBERYARD BISTRO · CC BY 4.0</div>
  <h1 style={{fontSize:'clamp(36px,8vw,88px)',letterSpacing:'-.085em',margin:'20px 0 0'}}>BODYCAM <span style={{color:'#d9b58d'}}>NEXT</span></h1>
- <p style={{fontSize:12,letterSpacing:'.16em',opacity:.78,textAlign:'center'}}>URBAN BLOCK / ART TEST 01 · NO WEAPONS · NO MULTIPLAYER</p>
+ <p style={{fontSize:12,letterSpacing:'.16em',opacity:.78,textAlign:'center'}}>URBAN BLOCK / FPS COMBAT PROTOTYPE · NO MULTIPLAYER</p>
  <button onClick={()=>{setEntered(true);setError('');setLoading('Инициализация сцены…')}} style={{border:0,background:'#e4c39a',color:'#212527',padding:'17px 29px',marginTop:20,fontWeight:800,letterSpacing:'.15em',cursor:'pointer'}}>ВОЙТИ НА КАРТУ →</button>
  <p style={{fontSize:10,opacity:.6,marginTop:35}}>На телефоне: левый стик — ходьба, справа — обзор. На ПК: WASD и мышь.</p>
  <p style={{fontSize:10,opacity:.6,marginTop:6,textAlign:'center',lineHeight:1.7}}>3D-окружение: <a href="https://developer.nvidia.com/orca/amazon-lumberyard-bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Amazon Lumberyard Bistro</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC BY 4.0</a><br/>glTF/KTX2: <a href="https://github.com/qian-o/GLTF-Assets/tree/main/Bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>qian-o</a> · адаптировано и оптимизировано для веба</p>
  </div>}
  {entered&&<><LookPad look={look}/><JoyStick value={stick}/>
+ <button aria-label="Выстрел" onPointerDown={e=>{e.preventDefault();fire.current++}} style={{position:'absolute',right:35,bottom:52,zIndex:35,border:'1px solid #ffffff80',background:'#253034bf',color:'white',borderRadius:'50%',width:86,height:86,fontSize:12,fontWeight:700,touchAction:'none'}}>FIRE</button>
+ <button aria-label="Перезарядка" onClick={()=>reload.current++} style={{position:'absolute',right:142,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 15px',fontSize:12}}>R</button>
+ <div style={{position:'absolute',bottom:9,right:18,zIndex:35,fontSize:11,background:'#172329b3',padding:8}}>{combat.ammo} / {combat.reserve} · HIT {combat.hits} · K.O. {combat.eliminations}{combat.reload?' · RELOAD':''}</div>
  <div style={{position:'absolute',left:'max(16px,env(safe-area-inset-left))',top:'max(12px,env(safe-area-inset-top))',zIndex:30,fontSize:11,textShadow:'0 2px 8px #000'}}>
  <b>BODYCAM: NEXT</b><div style={{opacity:.77,fontSize:9,marginTop:4}}>REAL GLTF · FREE ASSETS · DEVELOPMENT PREVIEW</div>
  </div>
