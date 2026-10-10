@@ -66,6 +66,7 @@ export class BistroSpatialStream {
  private frustum=new THREE.Frustum();
  private matrix=new THREE.Matrix4();
  private expanded=new THREE.Box3();
+ private mobile=typeof navigator!=='undefined'&&/iPhone|iPad|Android/i.test(navigator.userAgent);
  private anchor=new THREE.Vector3();
  constructor(options:{
   loader:GLTFLoader;scene:THREE.Scene;quality:'High'|'Cinematic Max';
@@ -115,8 +116,8 @@ export class BistroSpatialStream {
    this.scene.add(group);
    group.updateMatrixWorld(true);
    if(entry.isInterior)console.info('BISTRO_INTERIOR_ENTRY_GEOMETRY',JSON.stringify(carveBistroEntrance(group)));
-   const optimized=batchBistroStaticGeometry(group);
-   this.scene.add(optimized.visuals);
+   const optimized=this.mobile?{visuals:new THREE.Group(),report:{sourceMeshes:entry.asset.meshCount,mergedMeshes:0,hiddenMeshes:0,retainedMeshes:entry.asset.meshCount}}:batchBistroStaticGeometry(group);
+   if(!this.mobile)this.scene.add(optimized.visuals);
    this.active.set(id,{root:group,visuals:optimized.visuals,physics:false});
    console.info('BISTRO_SPATIAL_BATCH_RESULT',id,JSON.stringify(optimized.report));
    this.telemetry.completedMeshCount+=entry.asset.meshCount;
@@ -141,8 +142,8 @@ export class BistroSpatialStream {
    const distance=entry.box.distanceToPoint(camera.position);
    const interiorDistance=camera.position.distanceTo(DOOR);
    const isDesired=entry.isInterior
-    ?interiorDistance<45
-    :distance<VISUAL_DIST && this.frustum.intersectsBox(this.expanded.copy(entry.box).expandByScalar(14));
+    ?interiorDistance<(this.mobile?18:38)
+    :distance<(this.mobile?50:VISUAL_DIST) && this.frustum.intersectsBox(this.expanded.copy(entry.box).expandByScalar(14));
    const current=this.active.get(entry.asset.id);
    if(isDesired&&!current&&!this.pending.has(entry.asset.id)&&!this.failed.has(entry.asset.id))
     prioritized.push({entry,distance:entry.isInterior?interiorDistance-30:distance});
@@ -154,24 +155,25 @@ export class BistroSpatialStream {
     if(current.physics&&bodyDistance>PHYSICS_RELEASE){
       this.physics(entry.asset.id,current.root,false);current.physics=false;
     }
-    const mayUnload=entry.isInterior?interiorDistance>65:distance>UNLOAD_DIST;
+    const mayUnload=entry.isInterior?interiorDistance>(this.mobile?26:65):distance>(this.mobile?68:UNLOAD_DIST);
     if(mayUnload&&!isDesired){
       if(current.physics)this.physics(entry.asset.id,current.root,false);
       this.scene.remove(current.root);this.scene.remove(current.visuals);
-      disposeGroup(current.visuals);disposeGroup(current.root);this.active.delete(entry.asset.id);
+      if(!this.mobile)disposeGroup(current.visuals);
+      disposeGroup(current.root);this.active.delete(entry.asset.id);
       console.info('BISTRO_CHUNK_UNLOADED',entry.asset.id);
     }
    }
   }
   prioritized.sort((a,b)=>a.distance-b.distance);
-  const remaining=Math.max(0,2-this.pending.size);
+  const remaining=Math.max(0,(this.mobile?1:2)-this.pending.size);
   for(const {entry} of prioritized.slice(0,remaining))this.load(entry);
  }
  dispose(){
   this.stop=true;
   for(const [id,item]of this.active){
    if(item.physics)this.physics(id,item.root,false);
-   this.scene.remove(item.root);this.scene.remove(item.visuals);disposeGroup(item.visuals);disposeGroup(item.root);
+   this.scene.remove(item.root);this.scene.remove(item.visuals);if(!this.mobile)disposeGroup(item.visuals);disposeGroup(item.root);
   }
   this.active.clear();this.entries=[];
  }
