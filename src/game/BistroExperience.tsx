@@ -23,6 +23,9 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  loadedRef:React.RefObject<boolean>;
 }){
  const {camera,gl,scene}=useThree();
+ const qualityRef=useRef(quality);
+ qualityRef.current=quality;
+ useEffect(()=>{gl.setPixelRatio(quality==='Cinematic Max'?Math.min(window.devicePixelRatio,2.75):Math.min(window.devicePixelRatio,1.25));gl.shadowMap.enabled=quality==='Cinematic Max';gl.shadowMap.needsUpdate=true;scene.traverse(n=>{if(n instanceof THREE.Mesh){n.castShadow=quality==='Cinematic Max'&&!/glass|foliage|leaf|transparent/i.test((Array.isArray(n.material)?n.material[0]:n.material)?.name||'')}})},[quality,gl,scene]);
  const world=useRef<THREE.Group|null>(null);
  const streamed=useRef<BistroSpatialStream|null>(null);
  const streamedPhysics=useRef(new Map<string,Collider[]>());
@@ -162,7 +165,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
    if(scene.environment===rootTexture.current)scene.environment=null;
    rootTexture.current?.dispose();transcoder.dispose();
   };
- },[camera,gl,scene,quality,onStatus,onReady,onError,loadedRef]);
+ },[camera,gl,scene,onStatus,onReady,onError,loadedRef]);
 
  useFrame((_,dt)=>{
   if(!ready.current)return;
@@ -232,7 +235,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
  castShadow={quality==='Cinematic Max'}
  shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={18} shadow-camera-bottom={-18}
- shadow-camera-near={.8} shadow-camera-far={95} shadow-mapSize={[2048,2048]} shadow-bias={-.0001}/>
+ shadow-camera-near={.8} shadow-camera-far={95} shadow-mapSize={[1536,1536]} shadow-bias={-.0001}/>
  </>;
 }
 
@@ -271,9 +274,9 @@ export default function BistroExperience(){
  useEffect(()=>{document.body.style.touchAction='none';return()=>{document.body.style.touchAction=''}},[]);
  const fullscreen=()=>document.documentElement.requestFullscreen?.().catch(()=>{});
  return <main style={{position:'fixed',inset:0,overflow:'hidden',touchAction:'none',background:'#172027',fontFamily:'Arial,Helvetica,sans-serif',color:'#fff'}}>
- {entered?<Canvas key={quality} shadows={quality==='Cinematic Max'} dpr={quality==='Cinematic Max'?(typeof window!=='undefined'?window.devicePixelRatio:1):Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
+ {entered?<Canvas shadows dpr={Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
  camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
- onCreated={({gl,scene})=>{gl.setClearColor(0x95a3a7);scene.background=new THREE.Color('#aab9bc');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Попробуй перезапустить сцену.')});}}>
+ onCreated={({gl,scene})=>{gl.setClearColor(0x95a3a7);scene.background=new THREE.Color('#aab9bc');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
  <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
  <div style={{fontSize:10,letterSpacing:'.32em',opacity:.76}}>AMAZON LUMBERYARD BISTRO · CC BY 4.0</div>
