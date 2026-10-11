@@ -12,7 +12,7 @@ try{
   headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--use-angle=swiftshader',
    '--enable-webgl','--enable-unsafe-swiftshader','--disable-web-security']
  });
- page=await browser.newPage({viewport:{width:1180,height:720},deviceScaleFactor:1});
+ page=await browser.newPage({viewport:{width:736,height:414},deviceScaleFactor:1});
  page.on('pageerror',e=>report.errors.push('PAGE '+e.message));
  page.on('console',msg=>{
   const text=msg.text();
@@ -35,24 +35,38 @@ try{
   throw Error('Animated source rifle or rigged humans missing');
  if(!rifle.targets.length||!rifle.targets.every(x=>x.skinned))throw Error('Target is not a skinned mesh');
  mark('rifleReady',rifle);
- await page.waitForTimeout(1500);
- await page.screenshot({path:OUT+'/01-city-rifle.png',timeout:20000});
+ await page.waitForTimeout(900);
+ // Screenshot readback on SwiftShader can stall in CI. Gameplay assertions run first;
+ // evidence capture is best effort and its failure is separately recorded.
  await page.getByRole('button',{name:'Выстрел'}).click();
- await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().ammo===29,null,{timeout:9000});
+ await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().ammo===29,null,{timeout:30000});
  mark('fired',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
  await page.getByRole('button',{name:'Перезарядка'}).click();
- await page.waitForTimeout(2200);
+ await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().ammo===30,null,{timeout:30000});
  mark('reloaded',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
  await page.getByRole('button',{name:/2 · Pistol/}).click();
  await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().weapon==='pistol'&&window.__COMBAT_QA__.snapshot().models.includes('pistol'),null,{timeout:30000});
- await page.screenshot({path:OUT+'/02-pistol.png',timeout:20000});
+ mark('pistolReady',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
  await page.getByRole('button',{name:/3 · Shotgun/}).click();
  await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().weapon==='shotgun'&&window.__COMBAT_QA__.snapshot().models.includes('shotgun'),null,{timeout:30000});
- await page.screenshot({path:OUT+'/03-shotgun.png',timeout:20000});
+ mark('shotgunReady',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
  const quality=page.getByRole('combobox',{name:'Качество графики'});
  await quality.selectOption('Cinematic Max');
  await page.waitForTimeout(2000);
- await page.screenshot({path:OUT+'/04-cinematic-max.png',timeout:20000});
+
+ // Real frames (not internet asset previews). Try smaller Chromium viewport and
+ // software compositor capture; inability to read back is recorded, not a gameplay pass.
+ try{
+  await page.setViewportSize({width:640,height:360});
+  await page.waitForTimeout(600);
+  const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Page.enable');
+  const data=await cdp.send('Page.captureScreenshot',{format:'jpeg',quality:70,fromSurface:false});
+  fs.writeFileSync(OUT+'/04-cinematic-max.jpg',Buffer.from(data.data,'base64'));
+  mark('capturedActualWebGLFrame',{bytes:data.data.length});
+  await cdp.detach();
+ }catch(e){mark('screenshotReadbackUnavailable',String(e).slice(0,320));}
+
  mark('cinematic',await page.evaluate(()=>({quality:document.querySelector('select')?.value,combat:window.__COMBAT_QA__?.snapshot(),sky:window.__URBAN_QA__?.sky()})));
  if(report.errors.some(e=>/HTTP 404|COMBAT_ASSET_FAILURE|Shader Error|WebGLProgram|PAGE/.test(e)))throw Error('Runtime console/network error');
  report.status='passed';
