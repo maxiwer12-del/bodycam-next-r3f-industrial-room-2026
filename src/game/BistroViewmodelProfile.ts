@@ -2,9 +2,10 @@
  * Authored AK-74M + arms visual pose, calibrated from *our running WebGL game*
  * against the original Cransh skinned glTF (not the screenshots of original Bistro).
  *
- * Source glTF rotates its long barrel axis through a Sketchfab/FBX hierarchy;
- * a naive yaw=Math.PI leaves the rifle vertical and the gloved hands ballooned
- * toward the lens. Transform the entire existing skinned hierarchy together.
+ * The source AK barrel extends along its GLTF mesh's positive-Z direction.
+ * Verify the skinned muzzle is farther along camera -Z than the stock:
+ * the previous hip (-0.58, -0.30, -0.02) pointed the muzzle at the player.
+ * Rotate AK + both hands as one skinned unit to preserve their authored grip.
  * All values are camera-space meters, radians (Euler XYZ), and unitless scale.
  * No per-hand bone shifts: the original licensed artist's grip stays intact.
  */
@@ -18,14 +19,14 @@ export const AK_VIEWMODEL_POSES:Readonly<{
  ads:Readonly<ViewmodelPose>;
 }>=Object.freeze({
  hip:Object.freeze({
-  x:.26,y:-.16,z:-.84,
-  pitch:-.58,yaw:-.30,roll:-.02,
-  scale:.95
+  x:.15,y:.02,z:-.67,
+  pitch:.40,yaw:-2.90,roll:-.02,
+  scale:1.05
  }),
  ads:Object.freeze({
-  x:.14,y:-.06,z:-.88,
-  pitch:-.55,yaw:-.16,roll:0,
-  scale:.92
+  x:.08,y:.10,z:-.74,
+  pitch:.44,yaw:-2.95,roll:-.02,
+  scale:1.02
  })
 });
 export function interpolateViewmodel(
