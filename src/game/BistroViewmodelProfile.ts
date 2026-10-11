@@ -23,7 +23,7 @@ export const AK_VIEWMODEL_POSES:Readonly<{
  ads:Readonly<ViewmodelPose>;
 }>=Object.freeze({
  hip:Object.freeze({
-  x:.13,y:-.06,z:-.45,
+  x:.11,y:-.06,z:-.45,
   pitch:.20,yaw:-3.10,roll:-.02,
   scale:1.13
  }),
