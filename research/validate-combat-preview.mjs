@@ -44,12 +44,11 @@ try{
  await page.getByRole('button',{name:'Перезарядка'}).click();
  await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().ammo===30,null,{timeout:30000});
  mark('reloaded',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
- await page.getByRole('button',{name:/2 · Pistol/}).click();
- await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().weapon==='pistol'&&window.__COMBAT_QA__.snapshot().models.includes('pistol'),null,{timeout:30000});
- mark('pistolReady',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
- await page.getByRole('button',{name:/3 · Shotgun/}).click();
- await page.waitForFunction(()=>window.__COMBAT_QA__.snapshot().weapon==='shotgun'&&window.__COMBAT_QA__.snapshot().models.includes('shotgun'),null,{timeout:30000});
- mark('shotgunReady',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
+ if(!rifle.barrel?.pointsAway)throw Error('AK muzzle oriented toward the camera');
+ if(await page.getByRole('button',{name:/Pistol|Shotgun/i}).count())throw Error('Removed weapons still visible');
+ await page.keyboard.press('2');await page.keyboard.press('3');
+ if((await page.evaluate(()=>window.__COMBAT_QA__.snapshot().weapon))!=='rifle')throw Error('Removed weapon switch still active');
+ mark('akOnly',await page.evaluate(()=>window.__COMBAT_QA__.snapshot()));
  const quality=page.getByRole('combobox',{name:'Качество графики'});
  await quality.selectOption('Cinematic Max');
  await page.waitForTimeout(2000);
