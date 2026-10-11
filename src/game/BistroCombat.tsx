@@ -5,6 +5,7 @@ import {useFrame,useThree} from '@react-three/fiber';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 import {BistroRigAnimator} from './BistroRigAnimator';
+import {buildFpsSleeves} from './BistroForearms';
 import type {MotionTelemetry} from './BistroMovement';
 import {AK_VIEWMODEL_POSES,interpolateViewmodel} from './BistroViewmodelProfile';
 
@@ -30,12 +31,13 @@ type ViewBank={
  root:THREE.Group;rifle:THREE.Object3D|null;guns:Map<WeaponId,THREE.Object3D>;
  mixer:THREE.AnimationMixer|null;animator:BistroRigAnimator|null;
  rifleMeshes:THREE.Mesh[];extraMagazine:THREE.Object3D|null;rightHand:THREE.Object3D|null;leftHand:THREE.Object3D|null;
- armSkinned:THREE.SkinnedMesh|null;sleeveVertices:number;sleevesReshaped:boolean;
+ armSkinned:THREE.SkinnedMesh|null;sleeveVertices:number;
+ sleeves:{mesh:THREE.Mesh;hand:THREE.Object3D;side:number}[];
  flash:THREE.PointLight;loaded:boolean;
 };
 const SPAWNS:readonly [number,number,number][]=[[-8,.35,-7.3],[-10,.35,-11.2],[-4,.35,-12.5]];
 const emptyView=():ViewBank=>({
- root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,rifleMeshes:[],extraMagazine:null,rightHand:null,leftHand:null,armSkinned:null,sleeveVertices:0,sleevesReshaped:false,
+ root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,rifleMeshes:[],extraMagazine:null,rightHand:null,leftHand:null,armSkinned:null,sleeveVertices:0,sleeves:[],
  flash:new THREE.PointLight('#ffd6a0',0,2.1),loaded:false
 });
 function fitModel(object:THREE.Object3D,length:number){
@@ -52,60 +54,6 @@ function fitModel(object:THREE.Object3D,length:number){
  frame.scale.setScalar(length/largest);
  frame.add(inner);
  return {frame,extent};
-}
-
-/**
- * The original Cransh rig has independent IK hands holding the rifle, but
- * source sleeve meshes end in two rounded elbow caps that float in view.
- * Stretch ONLY the original textured forearm vertices toward off-screen elbows.
- * Hand and weapon bones, skin weights, materials and authored clips are intact.
- * The Jacobian maps the requested camera-space elbow shift back through the
- * individual vertex's weighted bone transform, computed ONCE at idle.
- */
-function reshapeAuthoredSleeves(mesh:THREE.SkinnedMesh,camera:THREE.Camera):number{
- const geometry=mesh.geometry.clone();
- mesh.geometry=geometry;
- const positions=geometry.getAttribute('position') as THREE.BufferAttribute;
- if(!positions)throw Error('Cransh arms have no vertex positions');
- camera.updateWorldMatrix(true,false);
- mesh.updateWorldMatrix(true,false);
- mesh.skeleton.update();
- const skinned=(i:number,x:number,y:number,z:number)=>{
-  const v=new THREE.Vector3(x,y,z);
-  mesh.applyBoneTransform(i,v);
-  mesh.localToWorld(v);
-  camera.worldToLocal(v);
-  return v;
- };
- let count=0;
- for(let i=0;i<positions.count;i++){
-  const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i);
-  // Palms, fingers and wrist cuffs are ahead of z=0.315 in the source mesh.
-  if(z>=.315||Math.abs(x)<.125)continue;
-  const t=Math.pow(THREE.MathUtils.clamp((.315-z)/.41,0,1),1.3);
-  if(t<.002)continue;
-  const sign=x>0?-1:1;
-  const shift=new THREE.Vector3(sign*.27*t,-.65*t,0);
-  const p=skinned(i,x,y,z);
-  const dx=skinned(i,x+1,y,z).sub(p);
-  const dy=skinned(i,x,y+1,z).sub(p);
-  const dz=skinned(i,x,y,z+1).sub(p);
-  const yz=dy.clone().cross(dz),zx=dz.clone().cross(dx),xy=dx.clone().cross(dy);
-  const det=dx.dot(yz);
-  if(Math.abs(det)<1e-10)continue;
-  positions.setXYZ(i,
-   x+shift.dot(yz)/det,
-   y+shift.dot(zx)/det,
-   z+shift.dot(xy)/det
-  );
-  count++;
- }
- positions.needsUpdate=true;
- geometry.computeVertexNormals();
- geometry.computeBoundingSphere();
- geometry.computeBoundingBox();
- mesh.frustumCulled=false;
- return count;
 }
 
 function clipOf(mixer:THREE.AnimationMixer,clips:THREE.AnimationClip[],pattern:RegExp){
@@ -301,6 +249,14 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
    bank.extraMagazine=ak.getObjectByName('Object_99')||null;
    if(bank.extraMagazine)bank.extraMagazine.visible=false;
    if(bank.rifleMeshes.length!==1||!bank.rightHand||!bank.leftHand||!bank.armSkinned)throw Error('Licensed AK rig is missing hands, sleeves or weapon mesh');
+   const forearms=buildFpsSleeves(bank.armSkinned);
+   bank.sleeveVertices=forearms.vertices;
+   bank.sleeves=forearms.sleeves.map(({mesh,side})=>({
+    mesh,side,hand:(side>0?bank.leftHand:bank.rightHand)!
+   }));
+   for(const item of bank.sleeves)camera.add(item.mesh);
+   console.info('COMBAT_AUTHENTIC_FOREARMS_READY',bank.sleeveVertices);
+
    const mixer=new THREE.AnimationMixer(ak);
    bank.mixer=mixer;
    bank.animator=new BistroRigAnimator(mixer,akGltf.animations);
@@ -371,6 +327,9 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
    window.removeEventListener('keydown',keyboard);window.removeEventListener('keyup',up);
    window.removeEventListener('mousedown',rightDown);window.removeEventListener('mouseup',rightUp);
    bank.animator?.dispose();
+   for(const sleeve of bank.sleeves){camera.remove(sleeve.mesh);sleeve.mesh.geometry.dispose();}
+   bank.sleeves.length=0;
+   bank.armSkinned?.geometry.dispose();
    bank.root.remove(bank.flash);camera.remove(bank.root);scene.remove(enemyLayer);
    if(!originalParent&&camera.parent===scene)scene.remove(camera);
    soldiers.current=[];bank.guns.clear();
@@ -475,13 +434,6 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   const speed=motion.speed;
   const moving=THREE.MathUtils.clamp(speed/4.75,0,1);
   bank.animator?.update(step,speed);
-  if(bank.armSkinned&&!bank.sleevesReshaped){
-   bank.sleevesReshaped=true;
-   bank.rifle?.updateWorldMatrix(true,true);
-   bank.sleeveVertices=reshapeAuthoredSleeves(bank.armSkinned,camera);
-   console.info('COMBAT_AUTHORED_SLEEVES_RESHAPED',bank.sleeveVertices);
-  }
-  
   const distance=motion.grounded?speed*step:0;
   sway.current+=distance*3.5;
   recoil.current=THREE.MathUtils.damp(recoil.current,0,17,step);
@@ -515,6 +467,15 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   bank.root.rotation.x=THREE.MathUtils.damp(bank.root.rotation.x,-recoil.current*.08-ads*.012,13,step);
   bank.root.rotation.z=THREE.MathUtils.damp(bank.root.rotation.z,
    THREE.MathUtils.lerp(.48,.10,ads)+drift*.35+recoil.current*.012,12,step);
+  // Independent textured cloth sleeves follow the original two IK wrists.
+  camera.updateWorldMatrix(true,false);
+  for(const {mesh,hand,side} of bank.sleeves){
+   hand.getWorldPosition(mesh.position);
+   camera.worldToLocal(mesh.position);
+   mesh.position.x+=side>0?-.012:.012;
+   mesh.position.y-=.043;
+   mesh.position.z+=.025;
+  }
   bank.flash.intensity=now<muzzleUntil.current?3.2:0;
   const perspective=camera as THREE.PerspectiveCamera;
   const newFov=THREE.MathUtils.lerp(viewport.current.fov,59,ads);
