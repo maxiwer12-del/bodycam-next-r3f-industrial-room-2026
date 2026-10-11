@@ -473,7 +473,7 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
    hand.getWorldPosition(mesh.position);
    camera.worldToLocal(mesh.position);
    mesh.position.x+=side>0?-.012:.012;
-   mesh.position.y-=.043;
+   mesh.position.y-=.005;
    mesh.position.z+=.025;
   }
   bank.flash.intensity=now<muzzleUntil.current?3.2:0;
