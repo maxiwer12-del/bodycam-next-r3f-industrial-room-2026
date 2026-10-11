@@ -33,11 +33,12 @@ type ViewBank={
  rifleMeshes:THREE.Mesh[];extraMagazine:THREE.Object3D|null;rightHand:THREE.Object3D|null;leftHand:THREE.Object3D|null;
  armSkinned:THREE.SkinnedMesh|null;sleeveVertices:number;
  sleeves:{mesh:THREE.Mesh;hand:THREE.Object3D;side:number}[];
+ sightVertices:[number,number]|null;
  flash:THREE.PointLight;loaded:boolean;
 };
 const SPAWNS:readonly [number,number,number][]=[[-8,.35,-7.3],[-10,.35,-11.2],[-4,.35,-12.5]];
 const emptyView=():ViewBank=>({
- root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,rifleMeshes:[],extraMagazine:null,rightHand:null,leftHand:null,armSkinned:null,sleeveVertices:0,sleeves:[],
+ root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,rifleMeshes:[],extraMagazine:null,rightHand:null,leftHand:null,armSkinned:null,sleeveVertices:0,sleeves:[],sightVertices:null,
  flash:new THREE.PointLight('#ffd6a0',0,2.1),loaded:false
 });
 function fitModel(object:THREE.Object3D,length:number){
@@ -141,7 +142,7 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   let disposed=false;
   const bank=emptyView();view.current=bank;
   bank.root.position.set(AK_VIEWMODEL_POSES.hip.x,AK_VIEWMODEL_POSES.hip.y,AK_VIEWMODEL_POSES.hip.z);
-  bank.root.rotation.z=.48; // FPS hip carry: flatten rifle in the camera view
+  bank.root.rotation.z=.40; // hip: subtly canted AK; ADS: iron sights straight ahead
   bank.flash.position.set(-.06,.10,-.75);
   bank.flash.intensity=0;
   bank.root.add(bank.flash);
@@ -249,6 +250,24 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
    bank.extraMagazine=ak.getObjectByName('Object_99')||null;
    if(bank.extraMagazine)bank.extraMagazine.visible=false;
    if(bank.rifleMeshes.length!==1||!bank.rightHand||!bank.leftHand||!bank.armSkinned)throw Error('Licensed AK rig is missing hands, sleeves or weapon mesh');
+
+   // The original glTF is one animated weapon mesh. Locate the actual rear
+   // and front iron-sight vertices once so ADS can be validated in camera space,
+   // not by the old loose estimate from the muzzle/stock alone.
+   const ironMesh=bank.rifleMeshes[0];
+   if(ironMesh instanceof THREE.SkinnedMesh){
+    const positions=ironMesh.geometry.getAttribute('position');
+    const closest=(x:number,y:number,z:number)=>{
+     let index=0,best=Infinity;
+     for(let i=0;i<positions.count;i++){
+      const d=(positions.getX(i)-x)**2+(positions.getY(i)-y)**2+(positions.getZ(i)-z)**2;
+      if(d<best){best=d;index=i}
+     }
+     return index;
+    };
+    bank.sightVertices=[closest(0,.18,-.07),closest(0,.201,.84)];
+   }
+
    const forearms=buildFpsSleeves(bank.armSkinned);
    bank.sleeveVertices=forearms.vertices;
    bank.sleeves=forearms.sleeves.map(({mesh,side})=>({
@@ -291,6 +310,23 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
      rigRotation:bank.rifle?.rotation.toArray(),rigQuaternion:bank.rifle?.quaternion.toArray(),aimNow:aim.current,adsAlpha:adsAmount.current,
      handPos:(()=>{if(!bank.rightHand)return null;const v=new THREE.Vector3();bank.rightHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
       leftHandPos:(()=>{if(!bank.leftHand)return null;const v=new THREE.Vector3();bank.leftHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
+
+      sights:(()=>{
+       const mesh=bank.rifleMeshes[0],ids=bank.sightVertices;
+       if(!(mesh instanceof THREE.SkinnedMesh)||!ids)return null;
+       const attr=mesh.geometry.getAttribute('position');
+       camera.updateWorldMatrix(true,false);mesh.updateWorldMatrix(true,false);
+       const points=ids.map(i=>{
+        const v=new THREE.Vector3().fromBufferAttribute(attr,i);
+        mesh.applyBoneTransform(i,v);
+        mesh.localToWorld(v);camera.worldToLocal(v);
+        return [v.x/-v.z,v.y/-v.z] as [number,number];
+       });
+       return {rear:points[0],front:points[1],aligned:
+        points.every(([x,y])=>Math.abs(x)<.035&&Math.abs(y)<.035)&&
+        Math.hypot(points[0][0]-points[1][0],points[0][1]-points[1][1])<.025};
+      })(),
+
       sleeveVertices:bank.sleeveVertices,
      // QA-only: the source GLTF muzzle (+Z) must be farther from the camera than the stock (-Z).
      barrel:(()=>{
@@ -466,7 +502,7 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   bank.root.position.z=THREE.MathUtils.damp(bank.root.position.z,z+recoil.current*.085,13,step);
   bank.root.rotation.x=THREE.MathUtils.damp(bank.root.rotation.x,-recoil.current*.08-ads*.012,13,step);
   bank.root.rotation.z=THREE.MathUtils.damp(bank.root.rotation.z,
-   THREE.MathUtils.lerp(.48,.10,ads)+drift*.35+recoil.current*.012,12,step);
+   THREE.MathUtils.lerp(.40,.30,ads)+drift*.35+recoil.current*.012,12,step);
   // Independent textured cloth sleeves follow the original two IK wrists.
   camera.updateWorldMatrix(true,false);
   for(const {mesh,hand,side} of bank.sleeves){
