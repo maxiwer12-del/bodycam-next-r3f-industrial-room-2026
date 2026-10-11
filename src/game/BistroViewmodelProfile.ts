@@ -16,19 +16,17 @@ export type ViewmodelPose={
 export const AK_VIEWMODEL_POSES:Readonly<{
  hip:Readonly<ViewmodelPose>;
  ads:Readonly<ViewmodelPose>;
- secondary:Readonly<Pick<ViewmodelPose,'pitch'|'yaw'|'roll'|'scale'>>;
 }>=Object.freeze({
  hip:Object.freeze({
-  x:.25,y:-.17,z:-.78,
-  pitch:-.8,yaw:-.65,roll:0,
+  x:.26,y:-.16,z:-.84,
+  pitch:-.58,yaw:-.30,roll:-.02,
   scale:.95
  }),
  ads:Object.freeze({
-  x:.31,y:-.035,z:-.81,
-  pitch:-.55,yaw:-.65,roll:0,
+  x:.14,y:-.06,z:-.88,
+  pitch:-.55,yaw:-.16,roll:0,
   scale:.92
- }),
- secondary:Object.freeze({pitch:-.03,yaw:Math.PI,roll:0,scale:1})
+ })
 });
 export function interpolateViewmodel(
  a:Readonly<ViewmodelPose>,
