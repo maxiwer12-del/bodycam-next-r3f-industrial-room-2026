@@ -1,0 +1,50 @@
+name: Combat Preview WebGL QA
+
+on:
+  push:
+    branches:
+      - feat/real-character-weapons-animation
+  workflow_dispatch:
+
+jobs:
+  real-chromium-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install headless Chromium with software WebGL
+        run: npx playwright install --with-deps chromium
+      - name: Build genuine glTF city, rig and audio assets
+        run: npm run build
+      - name: Start local Next.js preview
+        run: |
+          npm run start -- -p 3012 >/tmp/combat-next.log 2>&1 &
+          node --input-type=module - <<'JS'
+          let ok=false;
+          for(let i=0;i<100;i++){
+            try{
+              const r=await fetch('http://127.0.0.1:3012/');
+              if(r.ok){ok=true;break}
+            }catch{}
+            await new Promise(r=>setTimeout(r,500));
+          }
+          if(!ok)throw new Error('Next.js did not start');
+          JS
+      - name: Run actual skinned combat and cinematic screenshots
+        run: node research/validate-combat-preview.mjs
+      - name: Capture scene evidence and errors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-bodycam-combat-qa
+          path: |
+            research/character-qa-captures/**
+            /tmp/combat-next.log
+          retention-days: 7
