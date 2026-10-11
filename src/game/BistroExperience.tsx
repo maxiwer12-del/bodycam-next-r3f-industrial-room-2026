@@ -232,7 +232,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  });
  return <>
  <BistroCloudSky quality={quality}/>
- <BistroCombat trigger={fire} reload={reload} select={select} aim={aim} quality={quality} onStatus={onCombat}/>
+ <BistroCombat trigger={fire} reload={reload} select={select} aim={aim} quality={quality} mapReady={loadedRef} onStatus={onCombat}/>
  <hemisphereLight intensity={.65} color="#f0f3ff" groundColor="#b0a19a"/>
  <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
  castShadow={quality==='Cinematic Max'}
