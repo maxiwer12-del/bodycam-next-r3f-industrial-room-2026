@@ -90,10 +90,10 @@ function aimAtPlayer(root:THREE.Object3D,target:THREE.Vector3,delta:number){
  * The licensed AK-74M contains its own arms, weapon, and animation clips.
  * Other guns share a lightweight CC0 rigged FPS-arms asset.
  */
-export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
+export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapReady}:{
  trigger:React.RefObject<number>;reload:React.RefObject<number>;
  select:React.RefObject<number>;aim:React.RefObject<boolean>;
- onStatus:(value:CombatPulse)=>void;quality:'High'|'Cinematic Max';
+ onStatus:(value:CombatPulse)=>void;quality:'High'|'Cinematic Max';mapReady:React.RefObject<boolean>;
 }){
  const {camera,scene}=useThree();
  const view=useRef<ViewBank>(emptyView());
@@ -104,7 +104,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
  });
  const metrics=useRef({shots:0,hits:0,eliminations:0});
  const lastFire=useRef(0),fireCounter=useRef(0),reloadCounter=useRef(0);
- const selectedCounter=useRef(0),reloadUntil=useRef(0),equippedUntil=useRef(0);
+ const reloadUntil=useRef(0),equippedUntil=useRef(0);
  const recoil=useRef(0),sway=useRef(0),muzzleUntil=useRef(0);
  const cameraBefore=useRef(new THREE.Vector3());
  const worldRay=useRef(new THREE.Raycaster());
@@ -113,7 +113,6 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
  const ready=useRef(false);
  const report=useRef<()=>void>(()=>{});
  const audio=useRef<AudioContext|null>(null);
- const artifacts=useRef<THREE.Object3D[]>([]);
  const loadedClips=useRef<string[]>([]);
  const loadedModels=useRef<string[]>([]);
  const notify=()=>{
@@ -136,6 +135,16 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
   scene.add(enemyLayer);
   const loader=new GLTFLoader();
   const load=async()=>{
+   // Wait until the heavy Bistro core geometry and textures are ready.
+   // Loading full-size animated hands and three humanoids in parallel with the city
+   // caused excessive first-frame pressure on mobile WebGL GPU memory.
+   if(!mapReady.current){await new Promise<void>((resolve,reject)=>{
+    const timer=window.setInterval(()=>{
+     if(disposed){clearInterval(timer);reject(Error('Scene disposed'));}
+     else if(mapReady.current){clearInterval(timer);resolve();}
+    },250);
+   });}
+   if(disposed)return;
    const [soldierGltf,armsGltf,akGltf,pistolGltf,shotgunGltf]=await Promise.all([
     loader.loadAsync('/combat/soldier.glb'),loader.loadAsync('/combat/arms.glb'),
     loader.loadAsync('/combat/ak74/scene.gltf'),loader.loadAsync('/combat/pistol.glb'),
@@ -221,12 +230,9 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
   const up=(e:KeyboardEvent)=>{if(e.code==='ShiftLeft'||e.code==='ShiftRight')aim.current=false};
   const rightDown=(e:MouseEvent)=>{if(e.button===2)aim.current=true};
   const rightUp=(e:MouseEvent)=>{if(e.button===2)aim.current=false};
-  const suppress=(e:MouseEvent)=>e.preventDefault();
   window.addEventListener('keydown',keyboard);window.addEventListener('keyup',up);
   window.addEventListener('mousedown',rightDown);window.addEventListener('mouseup',rightUp);
   camera.parent?.updateMatrixWorld(true);
-  const canvas=(camera as THREE.Camera).userData.__combatCanvas as HTMLCanvasElement|undefined;
-  // Context menu on canvas is suppressed by the FPS World controller.
   const heartbeat=window.setInterval(()=>report.current(),320);
   if(new URLSearchParams(window.location.search).has('qa')){
    (window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__={
@@ -247,7 +253,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality}:{
    if((window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__)delete (window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__;
    void audio.current?.close();audio.current=null;
   };
- },[camera,scene,reload,select,trigger,aim,onStatus]);
+ },[camera,scene,reload,select,trigger,aim,onStatus,mapReady]);
 
  useEffect(()=>{
   for(const soldier of soldiers.current)setTargetMaterial(soldier.model,quality==='Cinematic Max');
