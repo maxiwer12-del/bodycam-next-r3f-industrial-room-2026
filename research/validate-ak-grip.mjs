@@ -34,7 +34,8 @@ try{
  const stable=await snap();
  check(Math.abs(stable.rigRotation[0]-hip.rigRotation[0])<.025,'No idle rotation jitter');
  await page.getByRole('button',{name:'ADS hold'}).hover();await page.mouse.down();
- await page.waitForTimeout(1100);
+ await page.waitForTimeout(950);
+ await page.waitForFunction(()=>window.__COMBAT_QA__?.snapshot()?.sights?.aligned===true,null,{timeout:5000});
  const aim=await snap();
  check(aim.aimNow&&aim.adsAlpha>.9,'Smooth transition into ADS');
  check(aim.barrel?.pointsAway&&aim.barrel.stock[2]-aim.barrel.muzzle[2]>.4,'ADS muzzle also points downrange');
