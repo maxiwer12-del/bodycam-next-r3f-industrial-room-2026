@@ -15,7 +15,8 @@
     "build:assets": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && node scripts/trace-next.mjs",
     "validate:streaming": "node scripts/validate-bistro-streaming.mjs",
     "validate:textures": "node scripts/validate-bistro-streaming.mjs",
-    "validate:combat": "node scripts/validate-combat-assets.mjs"
+    "validate:combat": "node scripts/validate-combat-assets.mjs",
+    "test:movement": "node research/validate-bhop.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

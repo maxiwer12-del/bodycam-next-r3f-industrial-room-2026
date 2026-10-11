@@ -9,6 +9,7 @@ import {BistroCloudSky} from './BistroCloudSky';
 import {calibrateBistroMaterial} from './BistroMaterialCalibration';
 import {carveBistroEntrance} from './BistroDoorway';
 import {BistroCombat,type CombatPulse,COMBAT_WEAPONS} from './BistroCombat';
+import {BistroMovement,EYE_HEIGHT,type MotionTelemetry} from './BistroMovement';
 import {useState,useEffect,useRef,useCallback} from 'react';
 import * as THREE from 'three';
 
@@ -17,14 +18,16 @@ type Axis={x:number;y:number};
 type Metrics={fps:number;calls:number;triangles:number;gpu:'WebGL2'|'WebGL1';meshes:number};
 type Collider={mesh:THREE.Mesh;box:THREE.Box3;solid:boolean};
 const START=new THREE.Vector3(-9,2.08,6);
-const PLAYER_HEIGHT=1.7;
+const PLAYER_HEIGHT=EYE_HEIGHT;
 const PLAYER_RADIUS=.3;
 
-function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRef,fire,reload,select,aim,onCombat}:{
+function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRef,fire,reload,select,aim,run,jump,onCombat,onMotion}:{
  stick:React.RefObject<Axis>;look:React.RefObject<Axis>;quality:Quality;
  onStatus:(s:string)=>void;onReady:()=>void;onError:(s:string)=>void;onMetric:(m:Metrics)=>void;
  loadedRef:React.RefObject<boolean>;
- fire:React.RefObject<number>;reload:React.RefObject<number>;select:React.RefObject<number>;aim:React.RefObject<boolean>;onCombat:(value:CombatPulse)=>void;
+ fire:React.RefObject<number>;reload:React.RefObject<number>;select:React.RefObject<number>;aim:React.RefObject<boolean>;
+ run:React.RefObject<boolean>;jump:React.RefObject<number>;
+ onCombat:(value:CombatPulse)=>void;onMotion:(value:MotionTelemetry)=>void;
 }){
  const {camera,gl,scene}=useThree();
  const qualityRef=useRef(quality);
@@ -40,6 +43,9 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  const ready=useRef(false);
  const lastReport=useRef<Metrics>({fps:0,calls:0,triangles:0,gpu:gl.capabilities.isWebGL2?'WebGL2':'WebGL1',meshes:0});
  const forward=useRef(new THREE.Vector3()),right=useRef(new THREE.Vector3());
+ const motor=useRef(new BistroMovement());
+ const motion=useRef<MotionTelemetry>(motor.current.snapshot());
+ const handledJump=useRef(0),motionElapsed=useRef(0);
  const queryBox=useRef(new THREE.Box3());
  const tempRay=useRef(new THREE.Raycaster());
  const candidate=useRef(new THREE.Vector3());
@@ -47,13 +53,21 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  const rootTexture=useRef<THREE.DataTexture|null>(null);
 
  useEffect(()=>{
-  function keydown(e:KeyboardEvent){if(['KeyW','KeyS','KeyA','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){keys.current.add(e.code);e.preventDefault();}}
+   function keydown(e:KeyboardEvent){
+    const codes=['KeyW','KeyS','KeyA','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'];
+    if(!codes.includes(e.code))return;
+    const el=e.target;
+    if(el instanceof HTMLElement&&el.closest('input,textarea,select,[contenteditable="true"]'))return;
+    // Ignore keyboard autorepeat. A hop requires a release + another distinct press.
+    if(e.code==='Space'&&!e.repeat&&!keys.current.has('Space'))jump.current++;
+    keys.current.add(e.code);e.preventDefault();
+   }
   function keyup(e:KeyboardEvent){keys.current.delete(e.code);}
-  function blur(){keys.current.clear();stick.current.x=0;stick.current.y=0;look.current.x=0;look.current.y=0;}
+   function blur(){keys.current.clear();run.current=false;stick.current.x=0;stick.current.y=0;look.current.x=0;look.current.y=0;}
   function pointer(e:MouseEvent){if(document.pointerLockElement===gl.domElement){look.current.x+=e.movementX;look.current.y+=e.movementY;}}
   window.addEventListener('keydown',keydown);window.addEventListener('keyup',keyup);window.addEventListener('blur',blur);window.addEventListener('mousemove',pointer);
   gl.domElement.addEventListener('click',()=>{if(!('ontouchstart'in window))gl.domElement.requestPointerLock?.().catch(()=>{});});
-  camera.position.copy(START);camera.rotation.order='YXZ';camera.rotation.set(0,0,0);
+  camera.position.copy(START);camera.rotation.order='YXZ';camera.rotation.set(0,0,0);motor.current.reset();handledJump.current=jump.current;
   return()=>{window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',blur);window.removeEventListener('mousemove',pointer)}
  },[camera,gl,stick,look]);
 
@@ -142,6 +156,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
     (window as unknown as {__URBAN_QA__?:unknown}).__URBAN_QA__={
       camera:()=>camera.position.toArray(),
       heading:()=>({yaw:rotation.current.yaw,pitch:rotation.current.pitch}),
+      movement:()=>motor.current.snapshot(),
       colliders:physics.length,meshCount:count,loadedAt:Date.now(),
       spatial:()=>streamed.current?.snapshot()||null,
       sky:()=>({cloudDome:!!scene.getObjectByName('BistroCloudSky'),environmentHDR:scene.environment instanceof THREE.Texture,backgroundIsHDR:scene.background instanceof THREE.Texture}),
@@ -179,51 +194,61 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   const x=THREE.MathUtils.clamp(stick.current.x+(k.has('KeyD')||k.has('ArrowRight')?1:0)-(k.has('KeyA')||k.has('ArrowLeft')?1:0),-1,1);
   const y=THREE.MathUtils.clamp(stick.current.y+(k.has('KeyW')||k.has('ArrowUp')?1:0)-(k.has('KeyS')||k.has('ArrowDown')?1:0),-1,1);
   const magnitude=Math.min(1,Math.hypot(x,y));
+  const dir=forward.current.set(0,0,0);
   if(magnitude>.04){
-   const dir=forward.current.set(Math.sin(yaw.yaw)*-y+Math.cos(yaw.yaw)*x,0,Math.cos(yaw.yaw)*-y-Math.sin(yaw.yaw)*x);
-   dir.normalize();const delta=step*2.65*magnitude;
-   const pos=camera.position;
-   const next=candidate.current.copy(pos).addScaledVector(dir,delta);
-   // Imported street/floor triangles now define passability; no invisible 13 m rectangle.
-   const hasBounds=Number.isFinite(next.x)&&Number.isFinite(next.z);
-   if(hasBounds){
-    let blocked=false;
-    // Check two body-height rays against actual imported triangles, using BVH.
-    for(const height of [-1.35,-.45]){
-      if(blocked)break;
-      const origin=new THREE.Vector3(pos.x,pos.y+height,pos.z);
-      tempRay.current.set(origin,dir);tempRay.current.near=0;tempRay.current.far=delta+PLAYER_RADIUS;
-      for(const c of colliders.current){
-        if(!c.box.clone().expandByScalar(.4).intersectsBox(queryBox.current.setFromCenterAndSize(origin,new THREE.Vector3(.85,2,.85))))continue;
-        const hits=tempRay.current.intersectObject(c.mesh,false);
-        if(hits.length){
-          const normal=hits[0].face?.normal;
-          if(normal&&Math.abs(normal.y)<.65){blocked=true;break}
-        }
-      }
-    }
-    if(!blocked){
-      // Contact is calculated from the imported road mesh rather than a fake floor plane.
-      const origin=new THREE.Vector3(next.x,pos.y+.65,next.z);
-      tempRay.current.set(origin,new THREE.Vector3(0,-1,0));
-      tempRay.current.near=0;tempRay.current.far=3.4;
-      let footY:number|null=null;
-      for(const c of colliders.current){
-        if(next.x<c.box.min.x||next.x>c.box.max.x||next.z<c.box.min.z||next.z>c.box.max.z)continue;
-        const hits=tempRay.current.intersectObject(c.mesh,false);
-        for(const h of hits){
-          if(h.point.y>pos.y-PLAYER_HEIGHT+.4||h.point.y<pos.y-PLAYER_HEIGHT-.48)continue;
-          const face=h.face?.normal;
-          if(!face)continue;
-          const normal=face.clone().transformDirection(c.mesh.matrixWorld);
-          if(Math.abs(normal.y)<.77)continue;
-          if(footY===null||h.point.y>footY)footY=h.point.y;
-        }
-      }
-      if(footY!==null){pos.x=next.x;pos.z=next.z;pos.y=THREE.MathUtils.lerp(pos.y,footY+PLAYER_HEIGHT,Math.min(1,dt*14));}
-    }
-   }
+   dir.set(Math.sin(yaw.yaw)*-y+Math.cos(yaw.yaw)*x,0,
+    Math.cos(yaw.yaw)*-y-Math.sin(yaw.yaw)*x);
+   dir.normalize().multiplyScalar(magnitude);
   }
+  const pressed=handledJump.current!==jump.current;
+  if(pressed)handledJump.current=jump.current;
+  // Sprint replaces the old Shift-to-ADS binding. RMB/mobile ADS stays.
+  const sprint=run.current||k.has('ShiftLeft')||k.has('ShiftRight');
+  const position=camera.position;
+  const terrain={
+   clear:(px:number,pz:number,dx:number,dz:number)=>{
+    const distance=Math.hypot(dx,dz);
+    if(distance<.0001)return true;
+    const rayDir=right.current.set(dx/distance,0,dz/distance);
+    for(const height of [-1.35,-.45]){
+     const origin=new THREE.Vector3(px,position.y+height,pz);
+     const expanded=queryBox.current.setFromCenterAndSize(origin,new THREE.Vector3(.85,2,.85));
+     tempRay.current.set(origin,rayDir);tempRay.current.near=0;tempRay.current.far=distance+PLAYER_RADIUS;
+     for(const c of colliders.current){
+      if(c.box.max.x<expanded.min.x-.4||c.box.min.x>expanded.max.x+.4||
+         c.box.max.z<expanded.min.z-.4||c.box.min.z>expanded.max.z+.4)continue;
+      const hit=tempRay.current.intersectObject(c.mesh,false)[0];
+      if(!hit)continue;
+      const normal=hit.face?.normal;
+      if(normal&&Math.abs(normal.clone().transformDirection(c.mesh.matrixWorld).y)<.65)return false;
+     }
+    }
+    return true;
+   },
+   floor:(px:number,pz:number,expectedFoot:number)=>{
+    // Only the actual imported street / interior triangles count as support.
+    const origin=new THREE.Vector3(px,Math.max(position.y+.6,expectedFoot+1.1),pz);
+    tempRay.current.set(origin,new THREE.Vector3(0,-1,0));
+    tempRay.current.near=0;tempRay.current.far=5.2;
+    let footY:number|null=null;
+    for(const c of colliders.current){
+     if(px<c.box.min.x||px>c.box.max.x||pz<c.box.min.z||pz>c.box.max.z)continue;
+     const hits=tempRay.current.intersectObject(c.mesh,false);
+     for(const hit of hits){
+      if(hit.point.y>expectedFoot+.48||hit.point.y<expectedFoot-3.6)continue;
+      const normal=hit.face?.normal;
+      if(!normal||Math.abs(normal.clone().transformDirection(c.mesh.matrixWorld).y)<.77)continue;
+      if(footY===null||hit.point.y>footY)footY=hit.point.y;
+     }
+    }
+    return footY;
+   }
+  };
+  motion.current=motor.current.update(step,position,{
+   wishX:dir.x,wishZ:dir.z,sprint,jumpPressed:pressed
+  },terrain);
+  motionElapsed.current+=dt;
+  if(motionElapsed.current>.19){motionElapsed.current=0;onMotion({...motion.current});}
   stats.current.frames++;stats.current.elapsed+=dt;
   if(stats.current.elapsed>=1.5){
    const m={fps:stats.current.frames/stats.current.elapsed,calls:gl.info.render.calls,triangles:gl.info.render.triangles,gpu:gl.capabilities.isWebGL2?'WebGL2' as const:'WebGL1' as const,meshes:lastReport.current.meshes};
@@ -232,7 +257,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  });
  return <>
  <BistroCloudSky quality={quality}/>
- <BistroCombat trigger={fire} reload={reload} select={select} aim={aim} quality={quality} mapReady={loadedRef} onStatus={onCombat}/>
+ <BistroCombat trigger={fire} reload={reload} select={select} aim={aim} quality={quality} mapReady={loadedRef} movement={motion} onStatus={onCombat}/>
  <hemisphereLight intensity={.65} color="#f0f3ff" groundColor="#b0a19a"/>
  <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
  castShadow={quality==='Cinematic Max'}
@@ -264,10 +289,11 @@ function LookPad({look}:{look:React.RefObject<Axis>}){
 }
 export default function BistroExperience(){
  const stick=useRef<Axis>({x:0,y:0}),look=useRef<Axis>({x:0,y:0}),loadedRef=useRef(false);
- const fire=useRef(0),reload=useRef(0),select=useRef(1),aim=useRef(false);
+ const fire=useRef(0),reload=useRef(0),select=useRef(1),aim=useRef(false),run=useRef(false),jump=useRef(0);
  const [combat,setCombat]=useState<CombatPulse>({shots:0,hits:0,eliminations:0,ammo:30,reserve:120,reload:false,weapon:'rifle',ready:false,targets:0,aiming:false});
  const [entered,setEntered]=useState(false),[quality,setQuality]=useState<Quality>('High');
  const [loading,setLoading]=useState(''),[error,setError]=useState('');
+ const [motion,setMotion]=useState<MotionTelemetry>({speed:0,sprinting:false,grounded:true,chain:0,jumps:0,airTime:0,verticalSpeed:0,groundedTime:0});
  const [stats,setStats]=useState<Metrics>({fps:0,calls:0,triangles:0,gpu:'WebGL2',meshes:0});
  const [landscape,setLandscape]=useState(true);
  const status=useCallback((x:string)=>setLoading(x),[]);
@@ -275,7 +301,8 @@ export default function BistroExperience(){
  const ready=useCallback(()=>setLoading(''),[]);
  const metric=useCallback((m:Metrics)=>setStats(m),[]);
  const onCombat=useCallback((v:CombatPulse)=>setCombat(v),[]);
- useEffect(()=>{const shoot=(e:KeyboardEvent)=>{if(e.code==='Space'){fire.current++;e.preventDefault()}};const mouse=(e:MouseEvent)=>{if(e.button===0&&document.pointerLockElement&&!((e.target as HTMLElement)?.closest('button')))fire.current++};window.addEventListener('keydown',shoot);window.addEventListener('mousedown',mouse);return()=>{window.removeEventListener('keydown',shoot);window.removeEventListener('mousedown',mouse)}},[]);
+ const onMotion=useCallback((v:MotionTelemetry)=>setMotion(v),[]);
+ useEffect(()=>{const mouse=(e:MouseEvent)=>{if(e.button===0&&document.pointerLockElement&&!((e.target as HTMLElement)?.closest('button')))fire.current++};const context=(e:MouseEvent)=>{if(document.pointerLockElement)e.preventDefault()};window.addEventListener('mousedown',mouse);window.addEventListener('contextmenu',context);return()=>{window.removeEventListener('mousedown',mouse);window.removeEventListener('contextmenu',context)}},[]);
  useEffect(()=>{const check=()=>setLandscape(window.innerWidth>=window.innerHeight);check();window.addEventListener('resize',check);return()=>window.removeEventListener('resize',check)},[]);
  useEffect(()=>{document.body.style.touchAction='none';return()=>{document.body.style.touchAction=''}},[]);
  const fullscreen=()=>document.documentElement.requestFullscreen?.().catch(()=>{});
@@ -283,16 +310,26 @@ export default function BistroExperience(){
  {entered?<Canvas shadows dpr={Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
  camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
  onCreated={({gl,scene})=>{gl.setClearColor(0xb0c4d6);scene.background=new THREE.Color('#b0c4d6');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
- <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} select={select} aim={aim} onCombat={onCombat}/>
+ <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} select={select} aim={aim} run={run} jump={jump} onCombat={onCombat} onMotion={onMotion}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
  <div style={{fontSize:10,letterSpacing:'.32em',opacity:.76}}>AMAZON LUMBERYARD BISTRO · CC BY 4.0</div>
  <h1 style={{fontSize:'clamp(36px,8vw,88px)',letterSpacing:'-.085em',margin:'20px 0 0'}}>BODYCAM <span style={{color:'#d9b58d'}}>NEXT</span></h1>
  <p style={{fontSize:12,letterSpacing:'.16em',opacity:.78,textAlign:'center'}}>URBAN BLOCK / FPS COMBAT PROTOTYPE · NO MULTIPLAYER</p>
  <button onClick={()=>{setEntered(true);setError('');setLoading('Инициализация сцены…')}} style={{border:0,background:'#e4c39a',color:'#212527',padding:'17px 29px',marginTop:20,fontWeight:800,letterSpacing:'.15em',cursor:'pointer'}}>ВОЙТИ НА КАРТУ →</button>
- <p style={{fontSize:10,opacity:.6,marginTop:35}}>На телефоне: левый стик — ходьба, справа — обзор. На ПК: WASD, мышь, 1/2/3 — оружие, R — перезарядка, Shift/ПКМ — прицел.</p>
+ <p style={{fontSize:10,opacity:.6,marginTop:35}}>На телефоне: левый стик — ходьба, справа — обзор. На ПК: WASD, мышь, 1/2/3 — оружие, R — перезарядка, Shift — бег, Space — прыжок (отпускай перед следующим), ПКМ — прицел.</p>
  <p style={{fontSize:10,opacity:.6,marginTop:6,textAlign:'center',lineHeight:1.7}}>3D-окружение: <a href="https://developer.nvidia.com/orca/amazon-lumberyard-bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Amazon Lumberyard Bistro</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC BY 4.0</a><br/>glTF/KTX2: <a href="https://github.com/qian-o/GLTF-Assets/tree/main/Bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>qian-o</a> · адаптировано и оптимизировано для веба<br/>FPS arms + AK-74M: <a href="https://sketchfab.com/3d-models/fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Cransh — CC BY 4.0</a> · Pistol/shotgun: <a href="https://3dassets.dev/packs/tactical-shooter-hill-town" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC0</a> · Soldier: <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Mixamo</a></p>
  </div>}
  {entered&&<><LookPad look={look}/><JoyStick value={stick}/>
+  <button aria-label="Бег" onPointerDown={e=>{e.preventDefault();run.current=true;e.currentTarget.setPointerCapture(e.pointerId)}}
+    onPointerUp={()=>run.current=false} onPointerCancel={()=>run.current=false}
+    style={{position:'absolute',left:'max(186px,calc(env(safe-area-inset-left) + 165px))',bottom:130,zIndex:35,
+      border:'1px solid #d7e9e6a3',background:motion.sprinting?'#a3c3b0e6':'#253034d9',
+      color:motion.sprinting?'#122725':'white',borderRadius:13,padding:'12px 15px',
+      fontSize:11,fontWeight:750,touchAction:'none'}}>RUN</button>
+  <button aria-label="Прыжок" onPointerDown={e=>{e.preventDefault();jump.current++;e.currentTarget.setPointerCapture(e.pointerId)}}
+    style={{position:'absolute',left:'max(191px,calc(env(safe-area-inset-left) + 168px))',bottom:62,zIndex:35,
+      border:'1px solid #d7e9e6a3',background:'#253034d9',color:'white',borderRadius:13,
+      padding:'13px 10px',fontWeight:750,fontSize:11,touchAction:'none'}}>JUMP</button>
  {/* Sight picture is always centered on the actual camera ray used by combat raycasts.
      Four etched reticle strokes fade to a fine dot while aiming. */}
  <div role="img" aria-label="Центральный прицел"
@@ -315,7 +352,13 @@ export default function BistroExperience(){
  <button aria-label="Выстрел" onPointerDown={e=>{e.preventDefault();fire.current++}} style={{position:'absolute',right:35,bottom:52,zIndex:35,border:'1px solid #ffffff80',background:'#253034bf',color:'white',borderRadius:'50%',width:86,height:86,fontSize:12,fontWeight:700,touchAction:'none'}}>FIRE</button>
  <button aria-label="Прицеливание" aria-pressed={combat.aiming} onClick={()=>{aim.current=!aim.current;}} style={{position:'absolute',right:222,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 12px',fontSize:11,touchAction:'none'}}>ADS</button>
  <button aria-label="Перезарядка" onClick={()=>reload.current++} style={{position:'absolute',right:142,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 15px',fontSize:12}}>R</button>
- <div style={{position:'absolute',bottom:9,right:18,zIndex:35,fontSize:11,background:'#172329b3',padding:8}}>{combat.weapon.toUpperCase()} · {combat.ammo} / {combat.reserve} · HIT {combat.hits} · K.O. {combat.eliminations}{combat.reload?' · RELOAD':''}{!combat.ready?' · LOADING ARMS':''}</div>
+  <div style={{position:'absolute',bottom:9,left:'max(12px,env(safe-area-inset-left))',
+    zIndex:34,fontSize:10,background:'#172329ba',padding:'5px 8px',borderRadius:4,
+    pointerEvents:'none',letterSpacing:'.04em'}}>
+    {Math.round(motion.speed*3.6)} km/h · {motion.sprinting?'SPRINT':'WALK'}
+    {!motion.grounded?' · AIR':''}{motion.chain>0?' · BHOP ×'+motion.chain:''}
+  </div>
+  <div style={{position:'absolute',bottom:9,right:18,zIndex:35,fontSize:11,background:'#172329b3',padding:8}}>{combat.weapon.toUpperCase()} · {combat.ammo} / {combat.reserve} · HIT {combat.hits} · K.O. {combat.eliminations}{combat.reload?' · RELOAD':''}{!combat.ready?' · LOADING ARMS':''}</div>
  <div style={{position:'absolute',left:'max(16px,env(safe-area-inset-left))',top:'max(12px,env(safe-area-inset-top))',zIndex:30,fontSize:11,textShadow:'0 2px 8px #000'}}>
  <b>BODYCAM: NEXT</b><div style={{opacity:.77,fontSize:9,marginTop:4}}>REAL GLTF · FREE ASSETS · DEVELOPMENT PREVIEW</div>
  </div>

@@ -5,6 +5,7 @@ import {useFrame,useThree} from '@react-three/fiber';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 import {BistroRigAnimator,BistroWeaponPartAnimator} from './BistroRigAnimator';
+import type {MotionTelemetry} from './BistroMovement';
 
 export type WeaponId='rifle'|'pistol'|'shotgun';
 export type CombatPulse={
@@ -16,7 +17,7 @@ type WeaponDefinition={
  fireDelay:number;reloadMs:number;model:string;length:number;
 };
 export const COMBAT_WEAPONS:readonly WeaponDefinition[]=[
- {id:'rifle',label:'AK-74M',mag:30,reserve:120,damage:34,fireDelay:115,reloadMs:2050,model:'/combat/ak74/scene.gltf',length:.91},
+ {id:'rifle',label:'AK-74M',mag:30,reserve:120,damage:34,fireDelay:115,reloadMs:2050,model:'/combat/ak74/scene.gltf',length:1.70},
  {id:'pistol',label:'Pistol',mag:12,reserve:60,damage:46,fireDelay:190,reloadMs:1330,model:'/combat/pistol.glb',length:.38},
  {id:'shotgun',label:'Shotgun',mag:6,reserve:30,damage:80,fireDelay:740,reloadMs:2650,model:'/combat/shotgun.glb',length:.78}
 ];
@@ -29,12 +30,12 @@ type Avatar={
 type ViewBank={
  root:THREE.Group;rifle:THREE.Object3D|null;guns:Map<WeaponId,THREE.Object3D>;
  mixer:THREE.AnimationMixer|null;animator:BistroRigAnimator|null;parts:Map<'pistol'|'shotgun',BistroWeaponPartAnimator>;
- rifleMeshes:THREE.Mesh[];rightHand:THREE.Object3D|null;armSkinned:THREE.SkinnedMesh|null;fullArmGeometry:THREE.BufferGeometry|null;singleHandGeometry:THREE.BufferGeometry|null;
+ rifleMeshes:THREE.Mesh[];extraMagazine:THREE.Object3D|null;rightHand:THREE.Object3D|null;armSkinned:THREE.SkinnedMesh|null;fullArmGeometry:THREE.BufferGeometry|null;singleHandGeometry:THREE.BufferGeometry|null;
  flash:THREE.PointLight;loaded:boolean;
 };
 const SPAWNS:readonly [number,number,number][]=[[-8,.35,-7.3],[-10,.35,-11.2],[-4,.35,-12.5]];
 const emptyView=():ViewBank=>({
- root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,parts:new Map(),rifleMeshes:[],rightHand:null,armSkinned:null,fullArmGeometry:null,singleHandGeometry:null,
+ root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,parts:new Map(),rifleMeshes:[],extraMagazine:null,rightHand:null,armSkinned:null,fullArmGeometry:null,singleHandGeometry:null,
  flash:new THREE.PointLight('#ffd6a0',0,2.1),loaded:false
 });
 function fitModel(object:THREE.Object3D,length:number){
@@ -138,10 +139,11 @@ function aimAtPlayer(root:THREE.Object3D,target:THREE.Vector3,delta:number){
  * Other guns are real CC0 GLBs that follow the authored right-hand bone.
  * The pistol uses a single-hand mesh variant so no spare hand floats in view.
  */
-export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapReady}:{
+export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapReady,movement}:{
  trigger:React.RefObject<number>;reload:React.RefObject<number>;
  select:React.RefObject<number>;aim:React.RefObject<boolean>;
  onStatus:(value:CombatPulse)=>void;quality:'High'|'Cinematic Max';mapReady:React.RefObject<boolean>;
+ movement:React.RefObject<MotionTelemetry>;
 }){
  const {camera,scene}=useThree();
  const view=useRef<ViewBank>(emptyView());
@@ -154,6 +156,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  const lastFire=useRef(0),fireCounter=useRef(0),reloadCounter=useRef(0);
  const reloadUntil=useRef(0),equippedUntil=useRef(0);
  const recoil=useRef(0),sway=useRef(0),muzzleUntil=useRef(0);
+ const lastAuthoredShot=useRef(0),reloadStarted=useRef(0);
  const adsAmount=useRef(0);
  const cameraBefore=useRef(new THREE.Vector3());
  const worldRay=useRef(new THREE.Raycaster());
@@ -176,7 +179,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  useEffect(()=>{
   let disposed=false;
   const bank=emptyView();view.current=bank;
-  bank.root.position.set(.18,-.07,-.82);
+  bank.root.position.set(.125,.13,-.70);
   bank.flash.position.set(-.06,.10,-.75);
   bank.flash.intensity=0;
   bank.root.add(bank.flash);
@@ -277,9 +280,12 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     bank.fullArmGeometry=armMesh.geometry;
     bank.singleHandGeometry=onlyRightHand(armMesh);
    }
-   bank.rifleMeshes=['Object_97','Object_99'].map(name=>ak.getObjectByName(name))
+   // Spare Mag_2 must only show while the authored reload actually swaps magazines.
+   bank.rifleMeshes=['Object_97'].map(name=>ak.getObjectByName(name))
      .filter((node):node is THREE.Mesh=>node instanceof THREE.Mesh);
-   if(bank.rifleMeshes.length!==2||!bank.rightHand)throw Error('Licensed AK rig is missing weapon meshes/hand socket');
+   bank.extraMagazine=ak.getObjectByName('Object_99')||null;
+   if(bank.extraMagazine)bank.extraMagazine.visible=false;
+   if(bank.rifleMeshes.length!==1||!bank.rightHand)throw Error('Licensed AK rig is missing weapon meshes/hand socket');
    const mixer=new THREE.AnimationMixer(ak);
    bank.mixer=mixer;
    bank.animator=new BistroRigAnimator(mixer,akGltf.animations);
@@ -328,9 +334,9 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    if(e.code==='Digit1'){select.current=1}
    if(e.code==='Digit2'){select.current=2}
    if(e.code==='Digit3'){select.current=3}
-   if(e.code==='ShiftLeft'||e.code==='ShiftRight')aim.current=true;
+   // Shift is reserved for sprint; right mouse/mobile ADS controls aim.
   };
-  const up=(e:KeyboardEvent)=>{if(e.code==='ShiftLeft'||e.code==='ShiftRight')aim.current=false};
+  const up=(_e:KeyboardEvent)=>{};
   const rightDown=(e:MouseEvent)=>{if(e.button===2)aim.current=true};
   const rightUp=(e:MouseEvent)=>{if(e.button===2)aim.current=false};
   window.addEventListener('keydown',keyboard);window.addEventListener('keyup',up);
@@ -407,7 +413,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    const def=COMBAT_WEAPONS.find(w=>w.id===current.current)!;
    const magazine=counts.current[current.current];
    if(magazine.ammo<def.mag&&magazine.reserve>0&&reloadUntil.current<=now){
-    reloadUntil.current=now+def.reloadMs;
+    reloadUntil.current=now+def.reloadMs;reloadStarted.current=now;
     bank.animator?.trigger('reload',def.reloadMs/1000);
     if(current.current!=='rifle')bank.parts.get(current.current)?.trigger('reload',current.current);
     report.current();
@@ -437,9 +443,12 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
      source.connect(gain).connect(ctx.destination);
      source.start();
     }
-    recoil.current=current.current==='shotgun'?.27:.13;
+    recoil.current=current.current==='shotgun'?.16:.105;
     muzzleUntil.current=now+55;
-    bank.animator?.trigger('shot',current.current==='shotgun'?.43:.23);
+    if(now-lastAuthoredShot.current>190){
+     lastAuthoredShot.current=now;
+     bank.animator?.trigger('shot',current.current==='shotgun'?.43:.23);
+    }
     if(current.current!=='rifle')bank.parts.get(current.current)?.trigger('shot',current.current);
     camera.getWorldPosition(rayOrigin.current);
     camera.getWorldDirection(rayDirection.current);
@@ -458,22 +467,25 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     report.current();
    }
   }
-  // Clip driven idle/fire/reload for the licensed AK rig, procedural sway/recoil for all models.
-  const speed=camera.position.distanceTo(cameraBefore.current)/Math.max(step,.008);
-  const moving=Math.min(1,speed/3);
+  // Horizontal velocity is supplied by the movement controller, not measured
+  // from camera displacement (which included floor snapping and jump height).
+  const motion=movement.current;
+  const speed=motion.speed;
+  const moving=THREE.MathUtils.clamp(speed/4.75,0,1);
   bank.animator?.update(step,speed);
-  bank.parts.get(current.current==='rifle'?'pistol':current.current)?.update(step);
-  // The original arms GLB has two separate gloved hands. Pistol fire is
-  // one-handed, so skip the off-hand triangles (without hiding the rig).
+  if(current.current!=='rifle')bank.parts.get(current.current)?.update(step);
   if(bank.armSkinned)bank.armSkinned.geometry=current.current==='pistol'?
    bank.singleHandGeometry||bank.fullArmGeometry!:bank.fullArmGeometry!;
-  cameraBefore.current.copy(camera.position);
-  sway.current+=step*(moving>.05?9:2.5);
-  recoil.current=Math.max(0,recoil.current-step*1.4);
+  const distance=motion.grounded?speed*step:0;
+  sway.current+=distance*3.5;
+  recoil.current=THREE.MathUtils.damp(recoil.current,0,17,step);
   const active=current.current;
   bank.root.visible=bank.guns.has(active);
   bank.rifle!.visible=true; // Animated source hands must remain visible.
   for(const mesh of bank.rifleMeshes)mesh.visible=active==='rifle';
+  if(bank.extraMagazine)bank.extraMagazine.visible=active==='rifle' &&
+   reloadUntil.current>now && now-reloadStarted.current>600 &&
+   now-reloadStarted.current<1700;
   for(const [id,obj] of bank.guns)if(id!=='rifle')obj.visible=id===active;
   // The right-hand socket moves with the author's Idle/Walk/Shot/Reload clips.
   // Mount each real secondary gun around its handle, not around the camera pivot.
@@ -491,31 +503,34 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     weapon.rotation.y=THREE.MathUtils.damp(weapon.rotation.y,Math.PI,14,step);
    }
   }
-  // Calibrated camera-space sockets. Both hands remain in the authored rig
-  // and every weapon is centered on the same camera ray while aiming.
-  adsAmount.current=THREE.MathUtils.damp(adsAmount.current,aim.current?1:0,15,step);
+  // Stable, larger and higher BODYCAM weapon placement. Idle is the only
+  // locomotion clip; procedural feedback is deliberately sub-centimetre.
+  const airborne=!motion.grounded;
+  adsAmount.current=THREE.MathUtils.damp(adsAmount.current,
+   aim.current&&!motion.sprinting?1:0,13,step);
   const ads=adsAmount.current;
   const profile=active==='pistol'?
-   {hip:[.24,-.24,-.69],sight:[-.048,-.085,-.78]}:
+   {hip:[.22,-.19,-.72],sight:[-.045,-.105,-.74]}:
    active==='shotgun'?
-   {hip:[.24,-.24,-.73],sight:[-.060,-.103,-.81]}:
-   {hip:[.235,-.255,-.61],sight:[-.028,-.12,-.78]};
-  const bob=Math.sin(sway.current)*moving*.007*(1-ads*.85);
-  const swayX=Math.sin(sway.current*.55)*moving*.006*(1-ads*.7);
+   {hip:[.21,-.20,-.74],sight:[-.050,-.115,-.78]}:
+   {hip:[.125,.13,-.70],sight:[-.020,.087,-.77]};
+  const gait=airborne?0:moving*(1-ads)*.003;
+  const bob=Math.sin(sway.current)*gait;
+  const drift=Math.sin(sway.current*.5)*gait*.45;
   const x=THREE.MathUtils.lerp(profile.hip[0],profile.sight[0],ads);
   const y=THREE.MathUtils.lerp(profile.hip[1],profile.sight[1],ads);
   const z=THREE.MathUtils.lerp(profile.hip[2],profile.sight[2],ads);
-  bank.root.position.x=THREE.MathUtils.damp(bank.root.position.x,x+swayX,17,step);
-  bank.root.position.y=THREE.MathUtils.damp(bank.root.position.y,y+bob-recoil.current*.11,17,step);
-  bank.root.position.z=THREE.MathUtils.damp(bank.root.position.z,z+recoil.current*.21,18,step);
-  bank.root.rotation.x=THREE.MathUtils.damp(bank.root.rotation.x,-recoil.current*.24-ads*.015,16,step);
+  bank.root.position.x=THREE.MathUtils.damp(bank.root.position.x,x+drift,12,step);
+  bank.root.position.y=THREE.MathUtils.damp(bank.root.position.y,y+bob-recoil.current*.06,12,step);
+  bank.root.position.z=THREE.MathUtils.damp(bank.root.position.z,z+recoil.current*.085,13,step);
+  bank.root.rotation.x=THREE.MathUtils.damp(bank.root.rotation.x,-recoil.current*.08-ads*.012,13,step);
   bank.root.rotation.z=THREE.MathUtils.damp(bank.root.rotation.z,
-   Math.sin(sway.current*.5)*moving*.006+recoil.current*.05,13,step);
+   drift*.35+recoil.current*.012,12,step);
   bank.flash.intensity=now<muzzleUntil.current?3.2:0;
   const perspective=camera as THREE.PerspectiveCamera;
-  const newFov=ads?59:viewport.current.fov;
+  const newFov=THREE.MathUtils.lerp(viewport.current.fov,59,ads);
   if(Math.abs(perspective.fov-newFov)>.07){
-   perspective.fov=THREE.MathUtils.lerp(perspective.fov,newFov,Math.min(1,step*11));
+   perspective.fov=THREE.MathUtils.damp(perspective.fov,newFov,12,step);
    perspective.updateProjectionMatrix();
   }
   for(const npc of soldiers.current){
