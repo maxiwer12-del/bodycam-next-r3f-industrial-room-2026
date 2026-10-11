@@ -53,36 +53,43 @@ function fitModel(object:THREE.Object3D,length:number){
  return {frame,extent};
 }
 function onlyRightHand(mesh:THREE.SkinnedMesh):THREE.BufferGeometry|null{
- const g=mesh.geometry;
- const index=g.getIndex(),joints=g.getAttribute('skinIndex'),weights=g.getAttribute('skinWeight');
+ const geometry=mesh.geometry;
+ const joints=geometry.getAttribute('skinIndex'),weights=geometry.getAttribute('skinWeight');
  if(!joints||!weights)return null;
- const left=new Set<number>();
- mesh.skeleton.bones.forEach((b,i)=>{
-  if(/(?:_L_|\.L\b|left|_L$|\.L_)/i.test(b.name))left.add(i);
- });
- if(!left.size)return null;
- const keep:number[]=[];
- const triangleCount=(index?.count??g.attributes.position.count)/3;
- function leftWeight(vertex:number){
-  let leftTotal=0,all=0;
-  for(let n=0;n<4;n++){
-   const w=weights.getComponent(vertex,n);
-   all+=w;
-   if(left.has(joints.getComponent(vertex,n)))leftTotal+=w;
+ const bones=mesh.skeleton.bones;
+ const rightRoot=bones.find(b=>/^Arm_R[_\.]/i.test(b.name));
+ const leftRoot=bones.find(b=>/^Arm_L[_\.]/i.test(b.name));
+ if(!rightRoot||!leftRoot)return null;
+ const isRight=bones.map(b=>{
+  for(let ancestor:THREE.Object3D|null=b;ancestor;ancestor=ancestor.parent){
+   if(ancestor===rightRoot)return true;
+   if(ancestor===leftRoot)return false;
   }
-  return all>0?leftTotal/all:0;
- }
+  return false;
+ });
+ const idx=geometry.index;
+ const keep:number[]=[];
+ const count=(idx?.count??geometry.attributes.position.count)/3;
+ const rightVertexWeight=(index:number)=>{
+  let right=0,total=0;
+  for(let j=0;j<4;j++){
+   const w=weights.getComponent(index,j);
+   total+=w;
+   if(isRight[Math.floor(joints.getComponent(index,j))])right+=w;
+  }
+  return total>0?right/total:0;
+ };
  let dropped=0;
- for(let t=0;t<triangleCount;t++){
-  const ids=[0,1,2].map(j=>index?index.getX(3*t+j):3*t+j);
-  if(ids.reduce((v,i)=>v+leftWeight(i),0)/3>.50){dropped++;continue}
-  keep.push(...ids);
+ for(let t=0;t<count;t++){
+  const vertices=[0,1,2].map(k=>idx?idx.getX(t*3+k):t*3+k);
+  if(vertices.reduce((sum,k)=>sum+rightVertexWeight(k),0)/3<.65){dropped++;continue}
+  keep.push(...vertices);
  }
- if(!dropped||!keep.length)return null;
- const result=g.clone();
+ if(!keep.length||!dropped)return null;
+ const result=geometry.clone();
  result.setIndex(keep);
  result.computeBoundingSphere();
- console.info('COMBAT_PISTOL_SINGLE_HAND',JSON.stringify({sourceTriangles:triangleCount,hiddenLeftTriangles:dropped,remaining:keep.length/3}));
+ console.info('COMBAT_PISTOL_RIGHT_ARM_FILTER',JSON.stringify({originalTriangles:count,rightTriangles:keep.length/3,dropped}));
  return result;
 }
 
@@ -294,7 +301,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
      // Never flip models just because the longest dimension happens to be Z.
      // CC0 Tactical Shooter Hill Town meshes are +Z forward, +Y up.
      // Camera and world aim along -Z, so reverse the muzzle consistently.
-     frame.rotation.set(-.52,Math.PI,0);
+     frame.rotation.set(id==='shotgun'?.26:-.52,Math.PI,id==='shotgun'?-.12:0);
      frame.userData.combatWeapon=id;
      frame.visible=false;
      bank.root.add(frame);
@@ -479,7 +486,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    if(weapon){
     const shotgun=active==='shotgun';
     const target=new THREE.Vector3(grip.x+(shotgun?.065:.048),
-     grip.y+(shotgun?.075:.098),grip.z-(shotgun?.20:.085));
+     grip.y+(shotgun?-.035:.098),grip.z-(shotgun?.20:.085));
     weapon.position.lerp(target,Math.min(1,step*24));
     weapon.rotation.y=THREE.MathUtils.damp(weapon.rotation.y,Math.PI,14,step);
    }
