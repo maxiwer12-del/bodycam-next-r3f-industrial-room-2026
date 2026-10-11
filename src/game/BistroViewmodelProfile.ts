@@ -6,6 +6,10 @@
  * Verify the skinned muzzle is farther along camera -Z than the stock:
  * the previous hip (-0.58, -0.30, -0.02) pointed the muzzle at the player.
  * Rotate AK + both hands as one skinned unit to preserve their authored grip.
+ * Hip keeps the stock at the player's lower right, facing downrange.
+ * ADS was solved from real rear/front sight vertices: they project to camera
+ * centre within 0.004 in normalized x/z and y/z. Only the authored full rig
+ * moves; the fingers and wrists retain their licensed animations.
  * All values are camera-space meters, radians (Euler XYZ), and unitless scale.
  * No per-hand bone shifts: the original licensed artist's grip stays intact.
  */
@@ -19,14 +23,14 @@ export const AK_VIEWMODEL_POSES:Readonly<{
  ads:Readonly<ViewmodelPose>;
 }>=Object.freeze({
  hip:Object.freeze({
-  x:.15,y:.02,z:-.67,
-  pitch:.40,yaw:-2.90,roll:-.02,
-  scale:1.05
+  x:.13,y:-.06,z:-.45,
+  pitch:.20,yaw:-3.10,roll:-.02,
+  scale:1.13
  }),
  ads:Object.freeze({
-  x:.08,y:.10,z:-.74,
-  pitch:.44,yaw:-2.95,roll:-.02,
-  scale:1.02
+  x:-.114,y:.243,z:-.62,
+  pitch:-.0255,yaw:-3.1751,roll:-.02,
+  scale:1.05
  })
 });
 export function interpolateViewmodel(
