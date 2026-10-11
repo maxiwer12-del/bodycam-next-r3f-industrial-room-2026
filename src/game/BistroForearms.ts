@@ -77,7 +77,7 @@ export function buildFpsSleeves(original:THREE.SkinnedMesh):{
    // Retain original cloth cross section; sweep its length towards an elbow
    // outside the frame. x/y at each ring provide actual authored wrinkles.
    p.setXYZ(vertex,
-    -side*.24*t+(x-centerX)*.55,
+    -side*.24*t+(x-centerX)*(.62+.17*t),
     -.74*t,
     .10*t+(y-centerY)*.50
    );
