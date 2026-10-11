@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/download-prebuilt-assets.mjs && node scripts/prepare-bistro-streaming.mjs && node scripts/stage-bistro-textures.mjs && node scripts/validate-urban.mjs && node scripts/validate-bistro-streaming.mjs && next build",
+    "build": "node scripts/download-prebuilt-assets.mjs && node scripts/prepare-bistro-streaming.mjs && node scripts/stage-bistro-textures.mjs && node scripts/validate-urban.mjs && node scripts/validate-bistro-streaming.mjs && node scripts/prepare-combat-assets.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "validate:assets": "node scripts/validate-urban.mjs",
@@ -14,7 +14,8 @@
     "test:e2e:safari": "node research/validate-urban-e2e.mjs webkit",
     "build:assets": "node scripts/build-urban.mjs && node scripts/validate-urban.mjs && node scripts/trace-next.mjs",
     "validate:streaming": "node scripts/validate-bistro-streaming.mjs",
-    "validate:textures": "node scripts/validate-bistro-streaming.mjs"
+    "validate:textures": "node scripts/validate-bistro-streaming.mjs",
+    "validate:combat": "node scripts/validate-combat-assets.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
