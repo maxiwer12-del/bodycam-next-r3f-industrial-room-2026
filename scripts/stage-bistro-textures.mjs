@@ -63,11 +63,13 @@ for(const doc of docs){
  for(const img of doc.gltf.images||[]){
   const name=img.uri.match(/(?:^|\/)Textures\/([A-Za-z0-9_.-]+\.ktx2)$/)?.[1];
   if(!name)throw Error('Invalid URI while rewriting '+doc.file);
-  img.uri='/maps/bistro-zone/Textures/'+name;
+  // GLTFLoader resolves root-absolute-looking URIs against the chunk base path.
+  // Emit an actual relative URL from /maps/bistro-overhaul/chunks/<chunk>/.
+  img.uri='../../../bistro-zone/Textures/'+name;
  }
  fs.writeFileSync(doc.file,JSON.stringify(doc.gltf));
 }
 console.log('BISTRO_KTX2_FIRST_PARTY_READY',JSON.stringify({
  unique:expected.size,downloaded:completed,bytes:downloadBytes,
- missingAfter:0,rewrittenChunks:docs.length,baseUrl:'/maps/bistro-zone/Textures/'
+ missingAfter:0,rewrittenChunks:docs.length,relativeUrl:'../../../bistro-zone/Textures/'
 }));
