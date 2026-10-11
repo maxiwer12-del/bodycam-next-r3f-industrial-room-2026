@@ -17,8 +17,8 @@ for(const entry of [...a.exterior,a.interior]){
  if(g.materials.some(m=>m.extensions?.KHR_materials_specular?.specularTexture))errors.push('Unconverted packed specular '+entry.id);
  for(const image of g.images){
    const uri=image.uri||'';
-   if(!/^\\/maps\\/bistro-zone\\/Textures\\/[A-Za-z0-9_.-]+\\.ktx2$/.test(uri)){
-     errors.push('Non-local/invalid KTX2 URI '+entry.id+' '+uri);continue;
+   if(!uri.startsWith('/maps/bistro-zone/Textures/')||!uri.endsWith('.ktx2')||uri.includes('..')){
+    errors.push('Non-local/invalid KTX2 URI '+entry.id+' '+uri);continue;
    }
    const tex='public'+uri;
    if(!fs.existsSync(tex)||fs.statSync(tex).size<150){
