@@ -17,10 +17,15 @@ for(const entry of [...a.exterior,a.interior]){
  if(g.materials.some(m=>m.extensions?.KHR_materials_specular?.specularTexture))errors.push('Unconverted packed specular '+entry.id);
  for(const image of g.images){
    const uri=image.uri||'';
-   if(!uri.startsWith('/maps/bistro-zone/Textures/')||!uri.endsWith('.ktx2')||uri.includes('..')){
-    errors.push('Non-local/invalid KTX2 URI '+entry.id+' '+uri);continue;
+   // Verify what GLTFLoader will request after URL resolution against the
+   // actual chunk folder, not just whether the string resembles a local path.
+   const resource=new URL(uri,'https://bistro-preview.invalid'+entry.url);
+   const expected='/maps/bistro-zone/Textures/';
+   if(resource.origin!=='https://bistro-preview.invalid'||!resource.pathname.startsWith(expected)||
+      !resource.pathname.endsWith('.ktx2')||uri.startsWith('/')){
+    errors.push('Non-local/invalid resolved KTX2 URI '+entry.id+' '+uri+' -> '+resource.pathname);continue;
    }
-   const tex='public'+uri;
+   const tex='public'+resource.pathname;
    if(!fs.existsSync(tex)||fs.statSync(tex).size<150){
      errors.push('Missing Bistro texture '+uri);continue;
    }
