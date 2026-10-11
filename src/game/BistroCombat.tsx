@@ -131,6 +131,10 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   bank.flash.position.set(-.06,.10,-.75);
   bank.flash.intensity=0;
   bank.root.add(bank.flash);
+  // Three.js does not draw camera children unless the camera belongs to the scene graph.
+  // R3F's default camera normally has no parent, so explicitly attach it and restore on dispose.
+  const originalParent=camera.parent;
+  if(!camera.parent)scene.add(camera);
   camera.add(bank.root);
   const enemyLayer=new THREE.Group();enemyLayer.name='CombatCharacterLayer';
   scene.add(enemyLayer);
@@ -259,6 +263,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    window.removeEventListener('keydown',keyboard);window.removeEventListener('keyup',up);
    window.removeEventListener('mousedown',rightDown);window.removeEventListener('mouseup',rightUp);
    bank.root.remove(bank.flash);camera.remove(bank.root);scene.remove(enemyLayer);
+   if(!originalParent&&camera.parent===scene)scene.remove(camera);
    soldiers.current=[];bank.guns.clear();
    if((window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__)delete (window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__;
    void audio.current?.close();audio.current=null;
