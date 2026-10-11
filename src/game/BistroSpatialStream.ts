@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {carveBistroEntrance} from './BistroDoorway';
 import {batchBistroStaticGeometry} from './BistroStaticBatcher';
+import {calibrateBistroMaterial} from './BistroMaterialCalibration';
 
 export interface BistroChunk {
  id:string;
@@ -103,11 +104,7 @@ export class BistroSpatialStream {
    group.traverse(obj=>{
     if(!(obj instanceof THREE.Mesh))return;
     const mat=Array.isArray(obj.material)?obj.material[0]:obj.material;
-    if(mat instanceof THREE.MeshStandardMaterial){
-     // DirectX source normals are authored with inverted Y.
-     if(mat.normalMap)mat.normalScale.y*=-1;
-     mat.envMapIntensity=.72;
-    }
+    if(mat)calibrateBistroMaterial(mat);
     const n=mat?.name?.toLowerCase()||'';
     obj.castShadow=this.quality==='Cinematic Max'&&!/glass|foliage|leaf|transparent/.test(n);
     obj.receiveShadow=this.quality==='Cinematic Max';
