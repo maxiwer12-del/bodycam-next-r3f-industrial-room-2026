@@ -5,6 +5,7 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 import {MeshBVH,acceleratedRaycast} from 'three-mesh-bvh';
 import {BistroSpatialStream} from './BistroSpatialStream';
+import {BistroCloudSky} from './BistroCloudSky';
 import {calibrateBistroMaterial} from './BistroMaterialCalibration';
 import {carveBistroEntrance} from './BistroDoorway';
 import {BistroCombat,type CombatPulse} from './BistroCombat';
@@ -28,7 +29,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
  const {camera,gl,scene}=useThree();
  const qualityRef=useRef(quality);
  qualityRef.current=quality;
- useEffect(()=>{gl.setPixelRatio(quality==='Cinematic Max'?Math.min(window.devicePixelRatio,2.75):Math.min(window.devicePixelRatio,1.25));gl.shadowMap.enabled=quality==='Cinematic Max';gl.shadowMap.needsUpdate=true;scene.traverse(n=>{if(n instanceof THREE.Mesh){n.castShadow=quality==='Cinematic Max'&&!/glass|foliage|leaf|transparent/i.test((Array.isArray(n.material)?n.material[0]:n.material)?.name||'')}})},[quality,gl,scene]);
+ useEffect(()=>{gl.setPixelRatio(quality==='Cinematic Max'?Math.min(window.devicePixelRatio,2.75):Math.min(window.devicePixelRatio,1.25));gl.shadowMap.enabled=quality==='Cinematic Max';gl.shadowMap.needsUpdate=true;scene.traverse(n=>{if(n instanceof THREE.Mesh){if(n.userData.isAtmosphere){n.castShadow=false;n.receiveShadow=false;return;}n.castShadow=quality==='Cinematic Max'&&!/glass|foliage|leaf|transparent/i.test((Array.isArray(n.material)?n.material[0]:n.material)?.name||'')}})},[quality,gl,scene]);
  const world=useRef<THREE.Group|null>(null);
  const streamed=useRef<BistroSpatialStream|null>(null);
  const streamedPhysics=useRef(new Map<string,Collider[]>());
@@ -96,7 +97,8 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
    if(disposed){env.dispose();return}
    rootTexture.current=env;env.mapping=THREE.EquirectangularReflectionMapping;
    scene.environment=env;scene.environmentIntensity=.62;
-   scene.background=env;scene.backgroundIntensity=.55;
+   // The HDRI is for physically based lighting/reflections only.
+   // A real camera-centered cloud atmosphere renders behind the city.
   },undefined,(error)=>console.warn('ENVIRONMENT_WARNING',error));
   onStatus('Загрузка городской карты · GLTF + KTX2...');
   const started=performance.now();
@@ -142,6 +144,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
       heading:()=>({yaw:rotation.current.yaw,pitch:rotation.current.pitch}),
       colliders:physics.length,meshCount:count,loadedAt:Date.now(),
       spatial:()=>streamed.current?.snapshot()||null,
+      sky:()=>({cloudDome:!!scene.getObjectByName('BistroCloudSky'),environmentHDR:scene.environment instanceof THREE.Texture,backgroundIsHDR:scene.background instanceof THREE.Texture}),
       setCamera:(xyz:number[])=>{if(xyz.length===3&&xyz.every(Number.isFinite))camera.position.fromArray(xyz)},
       setView:(yaw:number,pitch=0)=>{if(Number.isFinite(yaw)&&Number.isFinite(pitch))rotation.current={yaw,pitch}},
     };
@@ -228,6 +231,7 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
   }
  });
  return <>
+ <BistroCloudSky quality={quality}/>
  <BistroCombat trigger={fire} reload={reload} onStatus={onCombat}/>
  <hemisphereLight intensity={.65} color="#f0f3ff" groundColor="#b0a19a"/>
  <directionalLight position={[14,30,-10]} intensity={1.65} color="#fff5e9"
@@ -278,7 +282,7 @@ export default function BistroExperience(){
  return <main style={{position:'fixed',inset:0,overflow:'hidden',touchAction:'none',background:'#172027',fontFamily:'Arial,Helvetica,sans-serif',color:'#fff'}}>
  {entered?<Canvas shadows dpr={Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
  camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
- onCreated={({gl,scene})=>{gl.setClearColor(0x95a3a7);scene.background=new THREE.Color('#aab9bc');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
+ onCreated={({gl,scene})=>{gl.setClearColor(0xb0c4d6);scene.background=new THREE.Color('#b0c4d6');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
  <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} onCombat={onCombat}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
  <div style={{fontSize:10,letterSpacing:'.32em',opacity:.76}}>AMAZON LUMBERYARD BISTRO · CC BY 4.0</div>
