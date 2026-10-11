@@ -22,11 +22,11 @@ try{
  ok(rig.rigScale[0]>.22,'larger AK/arm scene (>1.3x)');
  report.events.push({rifle:rig.cameraRig,rigScale:rig.rigScale,clips:rig.animations});
  await take('01-ak-larger-higher');
- await page.getByRole('button',{name:'Pistol'}).click();
- await page.waitForFunction(()=>window.__COMBAT_QA__?.snapshot().weapon==='pistol',null,{timeout:22000});
- await take('02-pistol-shared-arms');
- await page.getByRole('button',{name:'AK-74M'}).click();
- await take('03-ak-after-switch');
+ ok(await page.getByRole('button',{name:/Pistol|Shotgun/i}).count()===0,'AK is the only available firearm');
+ ok(rig.barrel?.pointsAway===true,'Weapon muzzle points away from first-person camera');
+ await page.keyboard.press('2');await page.keyboard.press('3');
+ ok((await page.evaluate(()=>window.__COMBAT_QA__.snapshot().weapon))==='rifle','Keys 2/3 cannot switch weapon');
+ await take('02-ak-only');
  await page.goto(base+'/?qa=1',{waitUntil:'domcontentloaded',timeout:45000});
  await page.getByRole('button',{name:/ВОЙТИ НА КАРТУ/}).click();
  await page.waitForFunction(()=>window.__URBAN_QA__?.movement, null,{timeout:100000});

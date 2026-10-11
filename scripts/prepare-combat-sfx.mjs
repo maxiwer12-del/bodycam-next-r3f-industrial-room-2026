@@ -7,12 +7,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 const origin='https://raw.githubusercontent.com/petroulacl/fps-asset-kit/a19b7458a593598211c95ec46ef4eb4b6d1f94d7/sfx/firearm_sfx/Prepared%20SFX%20Library/';
 const inputs={
- rifle:origin+'AK-47/C_27P.wav',
- pistol:origin+'1911/A_34P.wav',
- shotgun:origin+'Mossberg/N_26P.wav'
+ rifle:origin+'AK-47/C_27P.wav'
 };
 const root=path.resolve('public/combat/audio');
 await fs.mkdir(root,{recursive:true});
+await Promise.all(['pistol.wav','shotgun.wav'].map(file=>fs.rm(path.join(root,file),{force:true})));
 async function download(url){
  const r=await fetch(url,{signal:AbortSignal.timeout(90000)});
  if(!r.ok)throw Error('SFX HTTP '+r.status+' '+url);
@@ -85,5 +84,5 @@ for(const [id,url] of Object.entries(inputs)){
 const manifestPath=path.resolve('public/combat/manifest.json');
 const manifest=JSON.parse(await fs.readFile(manifestPath,'utf8'));
 manifest.audio=results;
-manifest.licensing.push({model:'Weapon audio (1911 / AK-47 / Mossberg)',author:'Free Firearm Sound Library via fps-asset-kit',license:'CC0-1.0 as stated by kit',source:'https://github.com/petroulacl/fps-asset-kit/tree/a19b7458a593598211c95ec46ef4eb4b6d1f94d7/sfx'});
+manifest.licensing.push({model:'AK-74M gunshot sample',author:'Free Firearm Sound Library via fps-asset-kit',license:'CC0-1.0 as stated by kit',source:'https://github.com/petroulacl/fps-asset-kit/tree/a19b7458a593598211c95ec46ef4eb4b6d1f94d7/sfx'});
 await fs.writeFile(manifestPath,JSON.stringify(manifest,null,2));
