@@ -23,8 +23,8 @@ export function calibrateBistroMaterial(material:THREE.Material):void {
   // Cobblestones, curbs and asphalt aren't metallic, even if legacy packed
   // specular map channels contain stray high blue values.
   material.metalness=0;
-  material.roughness=Math.max(material.roughness,wetRoad?.84:.96);
-  material.envMapIntensity=wetRoad?.38:.24;
+  material.roughness=Math.max(material.roughness,wetRoad ? 0.84 : 0.96);
+  material.envMapIntensity=wetRoad ? 0.38 : 0.24;
  }else if(/^(master_concrete|concrete\d*|master_brick_|master_wood_painted|plaster|balcony_concrete)/.test(name)){
   material.metalness=0;
   material.roughness=Math.max(material.roughness,.78);
