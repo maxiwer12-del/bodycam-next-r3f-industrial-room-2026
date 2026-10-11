@@ -6,6 +6,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
 import {BistroRigAnimator,BistroWeaponPartAnimator} from './BistroRigAnimator';
 import type {MotionTelemetry} from './BistroMovement';
+import {AK_VIEWMODEL_POSES,interpolateViewmodel} from './BistroViewmodelProfile';
 
 export type WeaponId='rifle'|'pistol'|'shotgun';
 export type CombatPulse={
@@ -158,6 +159,8 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  const recoil=useRef(0),sway=useRef(0),muzzleUntil=useRef(0);
  const lastAuthoredShot=useRef(0),reloadStarted=useRef(0);
  const adsAmount=useRef(0);
+ const targetViewQuaternion=useRef(new THREE.Quaternion());
+ const targetViewEuler=useRef(new THREE.Euler(0,0,0,'XYZ'));
  const cameraBefore=useRef(new THREE.Vector3());
  const worldRay=useRef(new THREE.Raycaster());
  const rayOrigin=useRef(new THREE.Vector3()),rayDirection=useRef(new THREE.Vector3());
@@ -179,7 +182,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  useEffect(()=>{
   let disposed=false;
   const bank=emptyView();view.current=bank;
-  bank.root.position.set(.125,.13,-.70);
+  bank.root.position.set(AK_VIEWMODEL_POSES.hip.x,AK_VIEWMODEL_POSES.hip.y,AK_VIEWMODEL_POSES.hip.z);
   bank.flash.position.set(-.06,.10,-.75);
   bank.flash.intensity=0;
   bank.root.add(bank.flash);
@@ -268,7 +271,11 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    // Animated high-detail first-person arm + AK scene (from the licensed artist).
    const ak=cloneSkinned(akGltf.scene);
    const fittedAk=fitModel(ak,COMBAT_WEAPONS[0].length);
-   fittedAk.frame.rotation.set(-.03,Math.PI,0);
+   fittedAk.frame.rotation.set(
+    AK_VIEWMODEL_POSES.hip.pitch,AK_VIEWMODEL_POSES.hip.yaw,AK_VIEWMODEL_POSES.hip.roll
+   );
+   fittedAk.frame.scale.multiplyScalar(AK_VIEWMODEL_POSES.hip.scale);
+   fittedAk.frame.userData.baseScale=fittedAk.frame.scale.x/AK_VIEWMODEL_POSES.hip.scale;
    bank.rifle=fittedAk.frame;
    bank.guns.set('rifle',fittedAk.frame);
    bank.root.add(fittedAk.frame);
@@ -350,6 +357,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
      weapon:current.current,ammo:counts.current[current.current].ammo,
      pistolOneHand:!!bank.singleHandGeometry,
      cameraRig:bank.root.position.toArray(),rigScale:bank.rifle?.scale.toArray(),
+     rigRotation:bank.rifle?.rotation.toArray(),rigQuaternion:bank.rifle?.quaternion.toArray(),aimNow:aim.current,adsAlpha:adsAmount.current,
      handPos:(()=>{if(!bank.rightHand)return null;const v=new THREE.Vector3();bank.rightHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
      gun:(()=>{const obj=bank.guns.get(current.current);if(!obj)return null;const box=new THREE.Box3().setFromObject(obj);const v=box.getCenter(new THREE.Vector3());return {visible:obj.visible,center:camera.worldToLocal(v).toArray(),size:box.getSize(new THREE.Vector3()).toArray(),local:obj.position.toArray(),rotation:obj.rotation.toArray()}})()
      }),
@@ -513,7 +521,21 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    {hip:[.22,-.19,-.72],sight:[-.045,-.105,-.74]}:
    active==='shotgun'?
    {hip:[.21,-.20,-.74],sight:[-.050,-.115,-.78]}:
-   {hip:[.125,.13,-.70],sight:[-.020,.087,-.77]};
+   {hip:[AK_VIEWMODEL_POSES.hip.x,AK_VIEWMODEL_POSES.hip.y,AK_VIEWMODEL_POSES.hip.z],
+    sight:[AK_VIEWMODEL_POSES.ads.x,AK_VIEWMODEL_POSES.ads.y,AK_VIEWMODEL_POSES.ads.z]};
+  // A single quaternion changes the imported weapon and both source skinned
+  // hands in lockstep. Never offset the hand geometry or its wrist bones.
+  const riflePose=interpolateViewmodel(AK_VIEWMODEL_POSES.hip,AK_VIEWMODEL_POSES.ads,ads);
+  const rifleAngle=active==='rifle'?riflePose:AK_VIEWMODEL_POSES.secondary;
+  // Reuse the math objects to avoid GC pressure in mobile 60 Hz rendering.
+  const targetQuaternion=targetViewQuaternion.current.setFromEuler(
+   targetViewEuler.current.set(rifleAngle.pitch,rifleAngle.yaw,rifleAngle.roll,'XYZ')
+  );
+  bank.rifle!.quaternion.slerp(targetQuaternion,1-Math.exp(-13*step));
+  const baseScale=bank.rifle!.userData.baseScale as number;
+  const sourceScale=baseScale*(active==='rifle'?riflePose.scale:AK_VIEWMODEL_POSES.secondary.scale);
+  const nextScale=THREE.MathUtils.damp(bank.rifle!.scale.x,sourceScale,13,step);
+  bank.rifle!.scale.setScalar(nextScale);
   const gait=airborne?0:moving*(1-ads)*.003;
   const bob=Math.sin(sway.current)*gait;
   const drift=Math.sin(sway.current*.5)*gait*.45;
