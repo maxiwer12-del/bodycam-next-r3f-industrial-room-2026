@@ -4,11 +4,11 @@ import {useEffect,useRef} from 'react';
 import {useFrame,useThree} from '@react-three/fiber';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
-import {BistroRigAnimator,BistroWeaponPartAnimator} from './BistroRigAnimator';
+import {BistroRigAnimator} from './BistroRigAnimator';
 import type {MotionTelemetry} from './BistroMovement';
 import {AK_VIEWMODEL_POSES,interpolateViewmodel} from './BistroViewmodelProfile';
 
-export type WeaponId='rifle'|'pistol'|'shotgun';
+export type WeaponId='rifle';
 export type CombatPulse={
  shots:number;hits:number;eliminations:number;ammo:number;reserve:number;
  reload:boolean;weapon:WeaponId;ready:boolean;targets:number;aiming:boolean;
@@ -18,9 +18,7 @@ type WeaponDefinition={
  fireDelay:number;reloadMs:number;model:string;length:number;
 };
 export const COMBAT_WEAPONS:readonly WeaponDefinition[]=[
- {id:'rifle',label:'AK-74M',mag:30,reserve:120,damage:34,fireDelay:115,reloadMs:2050,model:'/combat/ak74/scene.gltf',length:1.70},
- {id:'pistol',label:'Pistol',mag:12,reserve:60,damage:46,fireDelay:190,reloadMs:1330,model:'/combat/pistol.glb',length:.38},
- {id:'shotgun',label:'Shotgun',mag:6,reserve:30,damage:80,fireDelay:740,reloadMs:2650,model:'/combat/shotgun.glb',length:.78}
+ {id:'rifle',label:'AK-74M',mag:30,reserve:120,damage:34,fireDelay:115,reloadMs:2050,model:'/combat/ak74/scene.gltf',length:1.70}
 ];
 type GunState={ammo:number;reserve:number};
 type Avatar={
@@ -30,13 +28,13 @@ type Avatar={
 };
 type ViewBank={
  root:THREE.Group;rifle:THREE.Object3D|null;guns:Map<WeaponId,THREE.Object3D>;
- mixer:THREE.AnimationMixer|null;animator:BistroRigAnimator|null;parts:Map<'pistol'|'shotgun',BistroWeaponPartAnimator>;
- rifleMeshes:THREE.Mesh[];extraMagazine:THREE.Object3D|null;rightHand:THREE.Object3D|null;armSkinned:THREE.SkinnedMesh|null;fullArmGeometry:THREE.BufferGeometry|null;singleHandGeometry:THREE.BufferGeometry|null;
+ mixer:THREE.AnimationMixer|null;animator:BistroRigAnimator|null;
+ rifleMeshes:THREE.Mesh[];extraMagazine:THREE.Object3D|null;rightHand:THREE.Object3D|null;leftHand:THREE.Object3D|null;
  flash:THREE.PointLight;loaded:boolean;
 };
 const SPAWNS:readonly [number,number,number][]=[[-8,.35,-7.3],[-10,.35,-11.2],[-4,.35,-12.5]];
 const emptyView=():ViewBank=>({
- root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,parts:new Map(),rifleMeshes:[],extraMagazine:null,rightHand:null,armSkinned:null,fullArmGeometry:null,singleHandGeometry:null,
+ root:new THREE.Group(),rifle:null,guns:new Map(),mixer:null,animator:null,rifleMeshes:[],extraMagazine:null,rightHand:null,leftHand:null,
  flash:new THREE.PointLight('#ffd6a0',0,2.1),loaded:false
 });
 function fitModel(object:THREE.Object3D,length:number){
@@ -54,47 +52,6 @@ function fitModel(object:THREE.Object3D,length:number){
  frame.add(inner);
  return {frame,extent};
 }
-function onlyRightHand(mesh:THREE.SkinnedMesh):THREE.BufferGeometry|null{
- const geometry=mesh.geometry;
- const joints=geometry.getAttribute('skinIndex'),weights=geometry.getAttribute('skinWeight');
- if(!joints||!weights)return null;
- const bones=mesh.skeleton.bones;
- const rightRoot=bones.find(b=>/^Arm_R[_\.]/i.test(b.name));
- const leftRoot=bones.find(b=>/^Arm_L[_\.]/i.test(b.name));
- if(!rightRoot||!leftRoot)return null;
- const isRight=bones.map(b=>{
-  for(let ancestor:THREE.Object3D|null=b;ancestor;ancestor=ancestor.parent){
-   if(ancestor===rightRoot)return true;
-   if(ancestor===leftRoot)return false;
-  }
-  return false;
- });
- const idx=geometry.index;
- const keep:number[]=[];
- const count=(idx?.count??geometry.attributes.position.count)/3;
- const rightVertexWeight=(index:number)=>{
-  let right=0,total=0;
-  for(let j=0;j<4;j++){
-   const w=weights.getComponent(index,j);
-   total+=w;
-   if(isRight[Math.floor(joints.getComponent(index,j))])right+=w;
-  }
-  return total>0?right/total:0;
- };
- let dropped=0;
- for(let t=0;t<count;t++){
-  const vertices=[0,1,2].map(k=>idx?idx.getX(t*3+k):t*3+k);
-  if(vertices.reduce((sum,k)=>sum+rightVertexWeight(k),0)/3<.65){dropped++;continue}
-  keep.push(...vertices);
- }
- if(!keep.length||!dropped)return null;
- const result=geometry.clone();
- result.setIndex(keep);
- result.computeBoundingSphere();
- console.info('COMBAT_PISTOL_RIGHT_ARM_FILTER',JSON.stringify({originalTriangles:count,rightTriangles:keep.length/3,dropped}));
- return result;
-}
-
 function clipOf(mixer:THREE.AnimationMixer,clips:THREE.AnimationClip[],pattern:RegExp){
  const clip=clips.find(c=>pattern.test(c.name));
  return clip?mixer.clipAction(clip):undefined;
@@ -137,12 +94,11 @@ function aimAtPlayer(root:THREE.Object3D,target:THREE.Vector3,delta:number){
  * First-person glTF character/weapon controller. No placeholder boxes/capsules.
  * Character enemies are rigged, textured Soldier.glb clones with skeleton-safe cloning.
  * The licensed AK-74M contains its own arms, weapon, and animation clips.
- * Other guns are real CC0 GLBs that follow the authored right-hand bone.
- * The pistol uses a single-hand mesh variant so no spare hand floats in view.
+ * Keep both original gloved hands synchronized with the animated AK-74M.
  */
-export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapReady,movement}:{
+export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movement}:{
  trigger:React.RefObject<number>;reload:React.RefObject<number>;
- select:React.RefObject<number>;aim:React.RefObject<boolean>;
+ aim:React.RefObject<boolean>;
  onStatus:(value:CombatPulse)=>void;quality:'High'|'Cinematic Max';mapReady:React.RefObject<boolean>;
  movement:React.RefObject<MotionTelemetry>;
 }){
@@ -150,12 +106,10 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  const view=useRef<ViewBank>(emptyView());
  const soldiers=useRef<Avatar[]>([]);
  const current=useRef<WeaponId>('rifle');
- const counts=useRef<Record<WeaponId,GunState>>({
-  rifle:{ammo:30,reserve:120},pistol:{ammo:12,reserve:60},shotgun:{ammo:6,reserve:30}
- });
+ const counts=useRef<Record<WeaponId,GunState>>({rifle:{ammo:30,reserve:120}});
  const metrics=useRef({shots:0,hits:0,eliminations:0});
  const lastFire=useRef(0),fireCounter=useRef(0),reloadCounter=useRef(0);
- const reloadUntil=useRef(0),equippedUntil=useRef(0);
+ const reloadUntil=useRef(0);
  const recoil=useRef(0),sway=useRef(0),muzzleUntil=useRef(0);
  const lastAuthoredShot=useRef(0),reloadStarted=useRef(0);
  const adsAmount=useRef(0);
@@ -281,13 +235,8 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    bank.root.add(fittedAk.frame);
    setTargetMaterial(ak,false);
    bank.rightHand=ak.getObjectByName('Hand_R_037')||null;
-   const armMesh=ak.getObjectByName('Object_11');
-   if(armMesh instanceof THREE.SkinnedMesh){
-    bank.armSkinned=armMesh;
-    bank.fullArmGeometry=armMesh.geometry;
-    bank.singleHandGeometry=onlyRightHand(armMesh);
-   }
-   // Spare Mag_2 must only show while the authored reload actually swaps magazines.
+   ak.traverse(node=>{if(!bank.leftHand&&/^Hand_L[_\.]/i.test(node.name))bank.leftHand=node;});
+    // Spare Mag_2 must only show while the authored reload actually swaps magazines.
    bank.rifleMeshes=['Object_97'].map(name=>ak.getObjectByName(name))
      .filter((node):node is THREE.Mesh=>node instanceof THREE.Mesh);
    bank.extraMagazine=ak.getObjectByName('Object_99')||null;
@@ -298,37 +247,8 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    bank.animator=new BistroRigAnimator(mixer,akGltf.animations);
    loadedClips.current=akGltf.animations.map(c=>c.name);
    console.info('COMBAT_AK74_CLIPS',JSON.stringify(loadedClips.current));
-   // Preserve the author's animated AK hand skeleton for ALL three weapons.
-   // The previous standalone 'wrad-arms' mesh had no clips and cut off at the
-   // wrists. It is never rendered: each secondary gun follows the real hand.
-   const optional=async()=>{
-    const [pistolGltf,shotgunGltf]=await Promise.all([
-     loader.loadAsync('/combat/pistol.glb'),loader.loadAsync('/combat/shotgun.glb')
-    ]);
-    if(disposed)return;
-    for(const [id,gltf] of [['pistol',pistolGltf],['shotgun',shotgunGltf]] as const){
-     const weapon=gltf.scene.clone(true);
-     const fitted=fitModel(weapon,COMBAT_WEAPONS.find(w=>w.id===id)!.length);
-     const {frame,extent}=fitted;
-     // Both original source guns are authored with their muzzles toward -Z.
-     // Never flip models just because the longest dimension happens to be Z.
-     // CC0 Tactical Shooter Hill Town meshes are +Z forward, +Y up.
-     // Camera and world aim along -Z, so reverse the muzzle consistently.
-     frame.rotation.set(id==='shotgun'?.26:-.52,Math.PI,id==='shotgun'?-.12:0);
-     frame.userData.combatWeapon=id;
-     frame.visible=false;
-     bank.root.add(frame);
-     bank.guns.set(id,frame);
-     setTargetMaterial(weapon,false);
-     bank.parts.set(id,new BistroWeaponPartAnimator(weapon,gltf.animations));
-
-    }
-    loadedModels.current.push('pistol','shotgun');
-    report.current();
-    console.info('COMBAT_SECONDARY_WEAPONS_READY_WITH_ANIMATED_HANDS');
-   };
-   void optional().catch(error=>console.warn('COMBAT_SECONDARY_WEAPONS_WARNING',error));
-   ready.current=true;bank.loaded=true;cameraBefore.current.copy(camera.position);
+   // Only the AK-74M viewmodel is loaded. Both arms are driven by the same skinned rig.
+    ready.current=true;bank.loaded=true;cameraBefore.current.copy(camera.position);
    report.current();
    console.info('COMBAT_REAL_ASSETS_READY',JSON.stringify({
     models:loadedModels.current,enemySkinnedMeshes:soldiers.current.map(x=>x.meshes.length),
@@ -338,9 +258,6 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   void load().catch(err=>{console.error('COMBAT_ASSET_FAILURE',err);ready.current=false;report.current()});
   const keyboard=(e:KeyboardEvent)=>{
    if(e.code==='KeyR'){reload.current++;e.preventDefault()}
-   if(e.code==='Digit1'){select.current=1}
-   if(e.code==='Digit2'){select.current=2}
-   if(e.code==='Digit3'){select.current=3}
    // Shift is reserved for sprint; right mouse/mobile ADS controls aim.
   };
   const up=(_e:KeyboardEvent)=>{};
@@ -355,14 +272,13 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     snapshot:()=>({ready:ready.current,models:loadedModels.current,animations:loadedClips.current,
      targets:soldiers.current.map(s=>({health:s.health,alive:s.alive,skinned:s.meshes.some(m=>m instanceof THREE.SkinnedMesh)})),
      weapon:current.current,ammo:counts.current[current.current].ammo,
-     pistolOneHand:!!bank.singleHandGeometry,
      cameraRig:bank.root.position.toArray(),rigScale:bank.rifle?.scale.toArray(),
      rigRotation:bank.rifle?.rotation.toArray(),rigQuaternion:bank.rifle?.quaternion.toArray(),aimNow:aim.current,adsAlpha:adsAmount.current,
      handPos:(()=>{if(!bank.rightHand)return null;const v=new THREE.Vector3();bank.rightHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
+      leftHandPos:(()=>{if(!bank.leftHand)return null;const v=new THREE.Vector3();bank.leftHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
      gun:(()=>{const obj=bank.guns.get(current.current);if(!obj)return null;const box=new THREE.Box3().setFromObject(obj);const v=box.getCenter(new THREE.Vector3());return {visible:obj.visible,center:camera.worldToLocal(v).toArray(),size:box.getSize(new THREE.Vector3()).toArray(),local:obj.position.toArray(),rotation:obj.rotation.toArray()}})()
      }),
-    fire:()=>trigger.current++,reload:()=>reload.current++,
-    select:(i:number)=>{if(i>=1&&i<=3)select.current=i}
+    fire:()=>trigger.current++,reload:()=>reload.current++
    };
   }
   return()=>{
@@ -370,14 +286,14 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    clearInterval(heartbeat);
    window.removeEventListener('keydown',keyboard);window.removeEventListener('keyup',up);
    window.removeEventListener('mousedown',rightDown);window.removeEventListener('mouseup',rightUp);
-   bank.animator?.dispose();for(const part of bank.parts.values())part.dispose();bank.parts.clear();bank.singleHandGeometry?.dispose();
+   bank.animator?.dispose();
    bank.root.remove(bank.flash);camera.remove(bank.root);scene.remove(enemyLayer);
    if(!originalParent&&camera.parent===scene)scene.remove(camera);
    soldiers.current=[];bank.guns.clear();
    if((window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__)delete (window as typeof window & {__COMBAT_QA__?:unknown}).__COMBAT_QA__;
    void audio.current?.close();audio.current=null;
   };
- },[camera,scene,reload,select,trigger,aim,onStatus,mapReady]);
+ },[camera,scene,reload,trigger,aim,onStatus,mapReady]);
 
  useEffect(()=>{
   let cancelled=false,requested=false;
@@ -388,7 +304,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    void audio.current.resume().catch(()=>{});
    if(requested)return;requested=true;
    const ctx=audio.current;
-   for(const name of ['rifle','pistol','shotgun'] as const){
+   for(const name of ['rifle'] as const){
     void fetch('/combat/audio/'+name+'.wav',{cache:'force-cache'})
      .then(response=>{if(!response.ok)throw Error('Audio HTTP '+response.status);return response.arrayBuffer()})
      .then(bytes=>ctx.decodeAudioData(bytes))
@@ -410,12 +326,6 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   const now=performance.now(),step=Math.min(dt,.065);
   const bank=view.current;
   if(!ready.current)return;
-  const choice=([null,'rifle','pistol','shotgun'] as const)[select.current]||'rifle';
-  if(choice!==current.current){
-   current.current=choice;equippedUntil.current=now+310;reloadUntil.current=0;
-   recoil.current=0;
-   report.current();
-  }
   if(reloadCounter.current!==reload.current){
    reloadCounter.current=reload.current;
    const def=COMBAT_WEAPONS.find(w=>w.id===current.current)!;
@@ -423,7 +333,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    if(magazine.ammo<def.mag&&magazine.reserve>0&&reloadUntil.current<=now){
     reloadUntil.current=now+def.reloadMs;reloadStarted.current=now;
     bank.animator?.trigger('reload',def.reloadMs/1000);
-    if(current.current!=='rifle')bank.parts.get(current.current)?.trigger('reload',current.current);
+    
     report.current();
    }
   }
@@ -437,7 +347,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    fireCounter.current=trigger.current;
    const def=COMBAT_WEAPONS.find(w=>w.id===current.current)!;
    const magazine=counts.current[current.current];
-   if(now>=reloadUntil.current&&now>=equippedUntil.current&&magazine.ammo>0&&now-lastFire.current>=def.fireDelay){
+   if(now>=reloadUntil.current&&magazine.ammo>0&&now-lastFire.current>=def.fireDelay){
     lastFire.current=now;
     magazine.ammo--;metrics.current.shots++;
     const ctx=audio.current;
@@ -447,17 +357,17 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
      source.buffer=buffer;
      source.playbackRate.value=.97+Math.random()*.06;
      const gain=ctx.createGain();
-     gain.gain.value=current.current==='shotgun'?.36:.26;
+     gain.gain.value=.26;
      source.connect(gain).connect(ctx.destination);
      source.start();
     }
-    recoil.current=current.current==='shotgun'?.16:.105;
+    recoil.current=.105;
     muzzleUntil.current=now+55;
     if(now-lastAuthoredShot.current>190){
      lastAuthoredShot.current=now;
-     bank.animator?.trigger('shot',current.current==='shotgun'?.43:.23);
+     bank.animator?.trigger('shot',.23);
     }
-    if(current.current!=='rifle')bank.parts.get(current.current)?.trigger('shot',current.current);
+    
     camera.getWorldPosition(rayOrigin.current);
     camera.getWorldDirection(rayDirection.current);
     worldRay.current.set(rayOrigin.current,rayDirection.current);
@@ -481,66 +391,34 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   const speed=motion.speed;
   const moving=THREE.MathUtils.clamp(speed/4.75,0,1);
   bank.animator?.update(step,speed);
-  if(current.current!=='rifle')bank.parts.get(current.current)?.update(step);
-  if(bank.armSkinned)bank.armSkinned.geometry=current.current==='pistol'?
-   bank.singleHandGeometry||bank.fullArmGeometry!:bank.fullArmGeometry!;
+  
   const distance=motion.grounded?speed*step:0;
   sway.current+=distance*3.5;
   recoil.current=THREE.MathUtils.damp(recoil.current,0,17,step);
-  const active=current.current;
-  bank.root.visible=bank.guns.has(active);
-  bank.rifle!.visible=true; // Animated source hands must remain visible.
-  for(const mesh of bank.rifleMeshes)mesh.visible=active==='rifle';
-  if(bank.extraMagazine)bank.extraMagazine.visible=active==='rifle' &&
-   reloadUntil.current>now && now-reloadStarted.current>600 &&
+  bank.root.visible=bank.loaded;
+  bank.rifle!.visible=true;
+  for(const mesh of bank.rifleMeshes)mesh.visible=true;
+  if(bank.extraMagazine)bank.extraMagazine.visible=
+   reloadUntil.current>now&&now-reloadStarted.current>600&&
    now-reloadStarted.current<1700;
-  for(const [id,obj] of bank.guns)if(id!=='rifle')obj.visible=id===active;
-  // The right-hand socket moves with the author's Idle/Walk/Shot/Reload clips.
-  // Mount each real secondary gun around its handle, not around the camera pivot.
-  if(active!=='rifle'&&bank.rightHand){
-   bank.root.updateMatrixWorld(true);
-   const handWorld=new THREE.Vector3();
-   bank.rightHand.getWorldPosition(handWorld);
-   const grip=bank.root.worldToLocal(handWorld);
-   const weapon=bank.guns.get(active);
-   if(weapon){
-    const shotgun=active==='shotgun';
-    const target=new THREE.Vector3(grip.x+(shotgun?.065:.048),
-     grip.y+(shotgun?-.035:.098),grip.z-(shotgun?.20:.085));
-    weapon.position.lerp(target,Math.min(1,step*24));
-    weapon.rotation.y=THREE.MathUtils.damp(weapon.rotation.y,Math.PI,14,step);
-   }
-  }
   // Stable, larger and higher BODYCAM weapon placement. Idle is the only
   // locomotion clip; procedural feedback is deliberately sub-centimetre.
   const airborne=!motion.grounded;
   adsAmount.current=THREE.MathUtils.damp(adsAmount.current,
    aim.current&&!motion.sprinting?1:0,13,step);
   const ads=adsAmount.current;
-  const profile=active==='pistol'?
-   {hip:[.22,-.19,-.72],sight:[-.045,-.105,-.74]}:
-   active==='shotgun'?
-   {hip:[.21,-.20,-.74],sight:[-.050,-.115,-.78]}:
-   {hip:[AK_VIEWMODEL_POSES.hip.x,AK_VIEWMODEL_POSES.hip.y,AK_VIEWMODEL_POSES.hip.z],
-    sight:[AK_VIEWMODEL_POSES.ads.x,AK_VIEWMODEL_POSES.ads.y,AK_VIEWMODEL_POSES.ads.z]};
-  // Turn the WHOLE original animated AK-and-hands rig together: never shear grip bones.
   const riflePose=interpolateViewmodel(AK_VIEWMODEL_POSES.hip,AK_VIEWMODEL_POSES.ads,ads);
-  const rifleAngle=active==='rifle'?riflePose:AK_VIEWMODEL_POSES.secondary;
-  // Reuse one quaternion/euler each frame to avoid extra mobile GC pressure.
   const targetQuaternion=targetViewQuaternion.current.setFromEuler(
-   targetViewEuler.current.set(rifleAngle.pitch,rifleAngle.yaw,rifleAngle.roll,'XYZ')
+   targetViewEuler.current.set(riflePose.pitch,riflePose.yaw,riflePose.roll,'XYZ')
   );
   bank.rifle!.quaternion.slerp(targetQuaternion,1-Math.exp(-13*step));
   const baseScale=bank.rifle!.userData.baseScale as number;
-  const sourceScale=baseScale*(active==='rifle'?riflePose.scale:AK_VIEWMODEL_POSES.secondary.scale);
-  const nextScale=THREE.MathUtils.damp(bank.rifle!.scale.x,sourceScale,13,step);
+  const nextScale=THREE.MathUtils.damp(bank.rifle!.scale.x,baseScale*riflePose.scale,13,step);
   bank.rifle!.scale.setScalar(nextScale);
   const gait=airborne?0:moving*(1-ads)*.003;
   const bob=Math.sin(sway.current)*gait;
   const drift=Math.sin(sway.current*.5)*gait*.45;
-  const x=THREE.MathUtils.lerp(profile.hip[0],profile.sight[0],ads);
-  const y=THREE.MathUtils.lerp(profile.hip[1],profile.sight[1],ads);
-  const z=THREE.MathUtils.lerp(profile.hip[2],profile.sight[2],ads);
+  const {x,y,z}=riflePose;
   bank.root.position.x=THREE.MathUtils.damp(bank.root.position.x,x+drift,12,step);
   bank.root.position.y=THREE.MathUtils.damp(bank.root.position.y,y+bob-recoil.current*.06,12,step);
   bank.root.position.z=THREE.MathUtils.damp(bank.root.position.z,z+recoil.current*.085,13,step);
