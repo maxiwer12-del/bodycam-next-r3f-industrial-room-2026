@@ -5,6 +5,7 @@ import {KTX2Loader} from 'three/addons/loaders/KTX2Loader.js';
 import {HDRLoader} from 'three/addons/loaders/HDRLoader.js';
 import {MeshBVH,acceleratedRaycast} from 'three-mesh-bvh';
 import {BistroSpatialStream} from './BistroSpatialStream';
+import {calibrateBistroMaterial} from './BistroMaterialCalibration';
 import {carveBistroEntrance} from './BistroDoorway';
 import {BistroCombat,type CombatPulse} from './BistroCombat';
 import {useState,useEffect,useRef,useCallback} from 'react';
@@ -114,15 +115,9 @@ function FPSWorld({stick,look,quality,onStatus,onReady,onError,onMetric,loadedRe
     count++;
     const mat=Array.isArray(node.material)?node.material[0]:node.material;
     const name=mat?.name?.toLowerCase()||'';
-    if(!used.has(mat)){
+    if(mat&&!used.has(mat)){
       used.add(mat);
-      if(mat instanceof THREE.MeshStandardMaterial){
-       mat.envMapIntensity=.72;
-       if(mat.normalMap)mat.normalScale.y*=-1; // Upstream uses DirectX normal maps; glTF expects OpenGL.
-       // Retain original artist-authored material roughness; do not flatten PBR response.
-       // Original metal/roughness channels are validated during asset conversion.
-       mat.needsUpdate=true;
-      }
+      calibrateBistroMaterial(mat);
     }
     node.castShadow=quality==='Cinematic Max'&& !/glass|foliage|leaf|hedge|transparent/.test(name);
     node.receiveShadow=quality==='Cinematic Max';
