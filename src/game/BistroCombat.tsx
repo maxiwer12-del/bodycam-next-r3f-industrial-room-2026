@@ -159,13 +159,39 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    // Full-body humanoids use the original skinned geometry and embedded Idle/Walk/Run clips.
    SPAWNS.forEach((position,id)=>{
     const model=cloneSkinned(soldierGltf.scene);
-    const box=new THREE.Box3().setFromObject(model);
-    const height=box.max.y-box.min.y;
-    if(!Number.isFinite(height)||height<.1)throw Error('Soldier asset is missing geometry');
+    model.updateMatrixWorld(true);
+    const skinnedMeshes:THREE.SkinnedMesh[]=[];
+    const rawBounds=new THREE.Box3();
+    model.traverse(node=>{
+     if(!(node instanceof THREE.Mesh))return;
+     if(node instanceof THREE.SkinnedMesh)skinnedMeshes.push(node);
+     const geometry=node.geometry as THREE.BufferGeometry;
+     if(!geometry.boundingBox)geometry.computeBoundingBox();
+     if(geometry.boundingBox){
+      // Authored bind-pose vertices are reliable even when animated skin
+      // bounds have not been evaluated on the first rendered frame.
+      rawBounds.union(geometry.boundingBox.clone().applyMatrix4(node.matrixWorld));
+     }
+    });
+    const animatedBounds=new THREE.Box3().setFromObject(model);
+    const rawHeight=rawBounds.isEmpty()?0:rawBounds.getSize(new THREE.Vector3()).y;
+    const posedHeight=animatedBounds.isEmpty()?0:animatedBounds.getSize(new THREE.Vector3()).y;
+    const height=Math.max(rawHeight,posedHeight);
+    if(id===0)console.info('COMBAT_SOLDIER_SOURCE_BOUNDS',JSON.stringify({
+     rawHeight,posedHeight,skinnedMeshes:skinnedMeshes.length,
+     meshes:uniqueMeshes(model).length,animations:soldierGltf.animations.map(clip=>clip.name)
+    }));
+    // The glTF original is authored in sub-meter units, therefore an arbitrary
+    // 0.1m minimum rejects a valid skinned character. Scale to human height.
+    if(!Number.isFinite(height)||height<.00001||skinnedMeshes.length===0)
+      throw Error('Soldier asset has no valid skinned geometry');
     model.scale.multiplyScalar(1.8/height);
     model.updateMatrixWorld(true);
     const normalized=new THREE.Box3().setFromObject(model);
-    model.position.y-=normalized.min.y;
+    const grounded=normalized.isEmpty()?
+      rawBounds.clone().applyMatrix4(new THREE.Matrix4().makeScale(1.8/height,1.8/height,1.8/height)):
+      normalized;
+    model.position.y-=grounded.min.y;
     const root=new THREE.Group();
     root.position.set(...position);
     root.add(model);
