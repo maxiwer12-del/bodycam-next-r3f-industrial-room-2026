@@ -119,7 +119,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   const ammo=counts.current[current.current];
   onStatus({...metrics.current,ammo:ammo.ammo,reserve:ammo.reserve,
    weapon:current.current,reload:reloadUntil.current>performance.now(),
-   ready:ready.current,targets:soldiers.current.filter(t=>t.alive).length});
+   ready:ready.current&&view.current.guns.has(current.current),targets:soldiers.current.filter(t=>t.alive).length});
  };
  report.current=notify;
 
@@ -145,13 +145,12 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     },250);
    });}
    if(disposed)return;
-   const [soldierGltf,armsGltf,akGltf,pistolGltf,shotgunGltf]=await Promise.all([
-    loader.loadAsync('/combat/soldier.glb'),loader.loadAsync('/combat/arms.glb'),
-    loader.loadAsync('/combat/ak74/scene.gltf'),loader.loadAsync('/combat/pistol.glb'),
-    loader.loadAsync('/combat/shotgun.glb')
+   const [soldierGltf,akGltf]=await Promise.all([
+    loader.loadAsync('/combat/soldier.glb'),
+    loader.loadAsync('/combat/ak74/scene.gltf')
    ]);
    if(disposed)return;
-   loadedModels.current=['soldier','arms','rifle','pistol','shotgun'];
+   loadedModels.current=['soldier','rifle'];
    // Full-body humanoids use the original skinned geometry and embedded Idle/Walk/Run clips.
    SPAWNS.forEach((position,id)=>{
     const model=cloneSkinned(soldierGltf.scene);
@@ -193,6 +192,12 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    bank.clips.idle?.play();
    loadedClips.current=akGltf.animations.map(c=>c.name);
    console.info('COMBAT_AK74_CLIPS',JSON.stringify(loadedClips.current));
+   // Optional CC0 weapons never block the primary animated rig from becoming ready.
+   const optional=async()=>{
+    const [armsGltf,pistolGltf,shotgunGltf]=await Promise.all([
+     loader.loadAsync('/combat/arms.glb'),loader.loadAsync('/combat/pistol.glb'),loader.loadAsync('/combat/shotgun.glb')
+    ]);
+    if(disposed)return;
    // Real CC0 hands and independently licensed models for the alternate weapons.
    const arms=cloneSkinned(armsGltf.scene);
    const armFrame=fitModel(arms,.70).frame;
@@ -212,6 +217,10 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
     frame.visible=false;
     setTargetMaterial(gunModel,false);
    }
+    loadedModels.current.push('arms','pistol','shotgun');report.current();
+    console.info('COMBAT_SECONDARY_WEAPONS_READY');
+   };
+   void optional().catch(err=>console.warn('COMBAT_SECONDARY_WEAPONS_WARNING',err));
    ready.current=true;bank.loaded=true;cameraBefore.current.copy(camera.position);
    report.current();
    console.info('COMBAT_REAL_ASSETS_READY',JSON.stringify({
@@ -319,6 +328,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
   sway.current+=step*(moving>.05?9:2.5);
   recoil.current=Math.max(0,recoil.current-step*1.4);
   const active=current.current;
+  bank.root.visible=bank.guns.has(active);
   for(const [id,obj] of bank.guns)obj.visible=id===active;
   if(bank.arms)bank.arms.visible=active!=='rifle';
   const ads=aim.current?1:0;
