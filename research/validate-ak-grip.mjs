@@ -25,6 +25,7 @@ try{
  const hip=await snap();
  check(hip.weapon==='rifle'&&hip.models.includes('rifle')&&hip.animations.includes('Rig|AK_Idle'),'Original licensed AK skinned viewmodel loaded');
  check(!!hip.leftHandPos&&!!hip.handPos,'Both original skinned hands loaded');
+ check(hip.sleeveVertices>=1400,'Authentic cloth forearms connect to the original animated wrists');
  check(hip.barrel?.pointsAway && hip.barrel.stock[2]-hip.barrel.muzzle[2]>.4,'Muzzle is forward, not facing the player');
  check(Math.abs(hip.barrel.muzzle[0])<.24&&Math.abs(hip.barrel.muzzle[1])<.3,'Barrel points near reticle, not offscreen');
  check(Math.abs(hip.cameraRig[0]-.15)<.055&&Math.abs(hip.cameraRig[2]+.67)<.08,'Corrected first-person hip placement');
