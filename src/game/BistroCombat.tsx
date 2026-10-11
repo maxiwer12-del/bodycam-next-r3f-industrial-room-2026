@@ -54,7 +54,7 @@ function clipOf(mixer:THREE.AnimationMixer,clips:THREE.AnimationClip[],pattern:R
 function playOnce(action?:THREE.AnimationAction){
  if(!action)return;
  action.reset().setLoop(THREE.LoopOnce,1);
- action.clampWhenFinished=true;
+ action.clampWhenFinished=false;
  action.fadeIn(.06).play();
 }
 function setTargetMaterial(model:THREE.Object3D,shadow:boolean){
@@ -113,6 +113,7 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  const ready=useRef(false);
  const report=useRef<()=>void>(()=>{});
  const audio=useRef<AudioContext|null>(null);
+ const audioClips=useRef(new Map<WeaponId,AudioBuffer>());
  const loadedClips=useRef<string[]>([]);
  const loadedModels=useRef<string[]>([]);
  const notify=()=>{
@@ -265,6 +266,29 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
  },[camera,scene,reload,select,trigger,aim,onStatus,mapReady]);
 
  useEffect(()=>{
+  let cancelled=false,requested=false;
+  const resume=()=>{
+   if(!audio.current){
+    try{audio.current=new AudioContext()}catch{return}
+   }
+   void audio.current.resume().catch(()=>{});
+   if(requested)return;requested=true;
+   const ctx=audio.current;
+   for(const name of ['rifle','pistol','shotgun'] as const){
+    void fetch('/combat/audio/'+name+'.wav',{cache:'force-cache'})
+     .then(response=>{if(!response.ok)throw Error('Audio HTTP '+response.status);return response.arrayBuffer()})
+     .then(bytes=>ctx.decodeAudioData(bytes))
+     .then(buffer=>{if(!cancelled)audioClips.current.set(name,buffer)})
+     .catch(error=>console.warn('COMBAT_AUDIO_WARNING',name,error));
+   }
+  };
+  // Safari/iOS requires Web Audio to be unlocked inside a user gesture.
+  window.addEventListener('pointerdown',resume,{passive:true});
+  window.addEventListener('keydown',resume);
+  return()=>{cancelled=true;window.removeEventListener('pointerdown',resume);window.removeEventListener('keydown',resume)};
+ },[]);
+
+ useEffect(()=>{
   for(const soldier of soldiers.current)setTargetMaterial(soldier.model,quality==='Cinematic Max');
  },[quality]);
 
@@ -301,6 +325,17 @@ export function BistroCombat({trigger,reload,select,aim,onStatus,quality,mapRead
    if(now>=reloadUntil.current&&now>=equippedUntil.current&&magazine.ammo>0&&now-lastFire.current>=def.fireDelay){
     lastFire.current=now;
     magazine.ammo--;metrics.current.shots++;
+    const ctx=audio.current;
+    const buffer=audioClips.current.get(current.current);
+    if(ctx&&ctx.state==='running'&&buffer){
+     const source=ctx.createBufferSource();
+     source.buffer=buffer;
+     source.playbackRate.value=.97+Math.random()*.06;
+     const gain=ctx.createGain();
+     gain.gain.value=current.current==='shotgun'?.36:.26;
+     source.connect(gain).connect(ctx.destination);
+     source.start();
+    }
     recoil.current=current.current==='shotgun'?.27:.13;
     muzzleUntil.current=now+55;
     if(current.current==='rifle')playOnce(bank.clips.fire);
