@@ -25,10 +25,10 @@ try{
  const hip=await snap();
  check(hip.weapon==='rifle'&&hip.models.includes('rifle')&&hip.animations.includes('Rig|AK_Idle'),'Original licensed AK skinned viewmodel loaded');
  check(!!hip.leftHandPos&&!!hip.handPos,'Both original skinned hands loaded');
- check(hip.sleeveVertices>=1400,'Authentic cloth forearms connect to the original animated wrists');
+ check(hip.sleeveVertices>=1400,'Both textured sleeve meshes are present');
  check(hip.barrel?.pointsAway && hip.barrel.stock[2]-hip.barrel.muzzle[2]>.4,'Muzzle is forward, not facing the player');
  check(Math.abs(hip.barrel.muzzle[0])<.24&&Math.abs(hip.barrel.muzzle[1])<.3,'Barrel points near reticle, not offscreen');
- check(Math.abs(hip.cameraRig[0]-.15)<.055&&Math.abs(hip.cameraRig[2]+.67)<.08,'Corrected first-person hip placement');
+ check(Math.abs(hip.cameraRig[0]-.13)<.055&&Math.abs(hip.cameraRig[2]+.45)<.08,'Corrected first-person hip placement');
  await page.screenshot({path:out+'/01-ak-hip.png',timeout:20000});report.screenshots.push('01-ak-hip.png');
  await page.waitForTimeout(900);
  const stable=await snap();
@@ -38,6 +38,8 @@ try{
  const aim=await snap();
  check(aim.aimNow&&aim.adsAlpha>.9,'Smooth transition into ADS');
  check(aim.barrel?.pointsAway&&aim.barrel.stock[2]-aim.barrel.muzzle[2]>.4,'ADS muzzle also points downrange');
+ check(aim.sights?.aligned===true,'Rear sight and front sight converge on the center of the ADS camera');
+ check(Math.hypot(...aim.sights.rear)<.035 && Math.hypot(...aim.sights.front)<.035,'Both sight markers are at the camera reticle');
  await page.screenshot({path:out+'/02-ak-ads.png',timeout:20000});report.screenshots.push('02-ak-ads.png');
  await page.mouse.up();
  check((await page.getByRole('button',{name:/Pistol|Shotgun/i}).count())===0,'No removed secondary weapon buttons');
