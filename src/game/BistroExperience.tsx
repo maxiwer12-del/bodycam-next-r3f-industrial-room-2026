@@ -310,7 +310,7 @@ export default function BistroExperience(){
  {entered?<Canvas shadows dpr={Math.min(1.25,typeof window!=='undefined'?window.devicePixelRatio:1)}
  camera={{position:START.toArray(),fov:78,near:.055,far:215}} gl={{antialias:true,alpha:false,powerPreference:'high-performance',toneMapping:THREE.ACESFilmicToneMapping,toneMappingExposure:.91,outputColorSpace:THREE.SRGBColorSpace}}
  onCreated={({gl,scene})=>{gl.setClearColor(0xb0c4d6);scene.background=new THREE.Color('#b0c4d6');gl.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();setError('GPU-контекст потерян. Перезапусти сцену.');});}}>
- <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} select={select} aim={aim} run={run} jump={jump} onCombat={onCombat} onMotion={onMotion}/>
+ <FPSWorld stick={stick} look={look} quality={quality} onStatus={status} onReady={ready} onError={fail} onMetric={metric} loadedRef={loadedRef} fire={fire} reload={reload} aim={aim} run={run} jump={jump} onCombat={onCombat} onMotion={onMotion}/>
  </Canvas>:<div style={{position:'absolute',inset:0,display:'flex',justifyContent:'center',alignItems:'center',flexDirection:'column',padding:24,background:'linear-gradient(135deg,#182a32,#29312e 65%,#181e22)'}}>
  <div style={{fontSize:10,letterSpacing:'.32em',opacity:.76}}>AMAZON LUMBERYARD BISTRO · CC BY 4.0</div>
  <h1 style={{fontSize:'clamp(36px,8vw,88px)',letterSpacing:'-.085em',margin:'20px 0 0'}}>BODYCAM <span style={{color:'#d9b58d'}}>NEXT</span></h1>
