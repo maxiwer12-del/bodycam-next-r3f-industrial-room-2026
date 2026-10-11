@@ -276,6 +276,30 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
      rigRotation:bank.rifle?.rotation.toArray(),rigQuaternion:bank.rifle?.quaternion.toArray(),aimNow:aim.current,adsAlpha:adsAmount.current,
      handPos:(()=>{if(!bank.rightHand)return null;const v=new THREE.Vector3();bank.rightHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
       leftHandPos:(()=>{if(!bank.leftHand)return null;const v=new THREE.Vector3();bank.leftHand.getWorldPosition(v);return bank.root.worldToLocal(v).toArray()})(),
+     // QA-only: the source GLTF muzzle (+Z) must be farther from the camera than the stock (-Z).
+     barrel:(()=>{
+      const mesh=bank.rifleMeshes[0];
+      if(!(mesh instanceof THREE.SkinnedMesh))return null;
+      const attr=mesh.geometry.getAttribute('position') as THREE.BufferAttribute|undefined;
+      if(!attr)return null;
+      let minZ=Infinity,maxZ=-Infinity;
+      for(let i=0;i<attr.count;i++){const z=attr.getZ(i);minZ=Math.min(minZ,z);maxZ=Math.max(maxZ,z)}
+      const threshold=(maxZ-minZ)*.03;
+      const muzzle=new THREE.Vector3(),stock=new THREE.Vector3(),v=new THREE.Vector3();
+      let countM=0,countS=0;
+      camera.updateWorldMatrix(true,false);mesh.updateWorldMatrix(true,false);
+      for(let i=0;i<attr.count;i++){
+       const z=attr.getZ(i),front=z>maxZ-threshold,back=z<minZ+threshold;
+       if(!front&&!back)continue;
+       v.fromBufferAttribute(attr,i);
+       mesh.applyBoneTransform(i,v);
+       mesh.localToWorld(v);camera.worldToLocal(v);
+       if(front){muzzle.add(v);countM++}else{stock.add(v);countS++}
+      }
+      if(!countM||!countS)return null;
+      muzzle.divideScalar(countM);stock.divideScalar(countS);
+      return {muzzle:muzzle.toArray(),stock:stock.toArray(),pointsAway:muzzle.z<stock.z};
+     })(),
      gun:(()=>{const obj=bank.guns.get(current.current);if(!obj)return null;const box=new THREE.Box3().setFromObject(obj);const v=box.getCenter(new THREE.Vector3());return {visible:obj.visible,center:camera.worldToLocal(v).toArray(),size:box.getSize(new THREE.Vector3()).toArray(),local:obj.position.toArray(),rotation:obj.rotation.toArray()}})()
      }),
     fire:()=>trigger.current++,reload:()=>reload.current++
