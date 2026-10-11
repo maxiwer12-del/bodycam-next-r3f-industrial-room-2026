@@ -39,10 +39,15 @@ async function binary(file,url){
 }
 await fs.mkdir(root,{recursive:true});
 await binary('soldier.glb',sources.soldier);
-await binary('arms.glb',sources.arms);
-for(const [name,file] of [['pistol','Pistol_Full_West.glb'],['shotgun','Shotgun_Pump_West.glb']]){
- await binary(name+'.glb',sources.gun+file);
+const operativeSource='https://raw.githubusercontent.com/StarKnightt/counter-strike-in-browser/92f3e6ddee40c6b531c0788c2cf3db4c56853a37/public/models/';
+for(const variant of ['mask','wrap_goggles','mask_cap']){
+ await binary('operatives/'+variant+'.glb',operativeSource+'bot_'+variant+'.glb');
 }
+await binary('arms.glb',sources.arms);
+// Fully spatial, textured and animated CC0 replacements for the old
+// ultra-thin flat guns, whose edge-on geometry looked invisible in FPS.
+await binary('pistol.glb','https://cdn.3dassets.dev/assets/27541/v1/model.glb');
+await binary('shotgun.glb','https://cdn.3dassets.dev/assets/27548/v1/model.glb');
 const document=JSON.parse((await get(sources.ak+'scene.gltf')).toString('utf8'));
 if(!document.meshes?.length||!document.animations?.length||!document.skins?.length)throw Error('AK74 file is missing meshes, animations or skinning');
 const outDir=path.join(root,'ak74');await fs.mkdir(outDir,{recursive:true});
@@ -74,13 +79,15 @@ for(let i=0;i<(document.images||[]).length;i++){
 await fs.writeFile(path.join(outDir,'scene.gltf'),JSON.stringify(document));
 await fs.writeFile(path.join(root,'manifest.json'),JSON.stringify({
  version:1,
- models:{soldier:'soldier.glb',arms:'arms.glb',pistol:'pistol.glb',shotgun:'shotgun.glb',rifle:'ak74/scene.gltf'},
+ models:{soldier:'soldier.glb',operatives:['operatives/mask.glb','operatives/wrap_goggles.glb','operatives/mask_cap.glb'],arms:'arms.glb',pistol:'pistol.glb',shotgun:'shotgun.glb',rifle:'ak74/scene.gltf'},
  animationClips:document.animations.map(a=>a.name||'(unnamed)'),
  ak74Skins:document.skins.length,
  licensing:[
   {model:'AK-74m arms + animation',author:'Cransh',license:'CC-BY-4.0',source:'https://sketchfab.com/3d-models/fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14'},
   {model:'WRAD FPS arms',author:'wriks',license:'CC0-1.0',source:'https://github.com/wwwriks/wrad-arms'},
-  {model:'Pistol and shotgun',author:'OpenGameArt / fps-asset-kit',license:'CC0-1.0',source:'https://github.com/petroulacl/fps-asset-kit'},
+  {model:'Animated compact pistol',author:'3DAssets.dev Tactical Shooter Hill Town',license:'CC0-1.0',source:'https://3dassets.dev/assets/tactical-shooter-hill-town-compact-pistol-d527475f'},
+  {model:'Animated semi automatic shotgun',author:'3DAssets.dev Tactical Shooter Hill Town',license:'CC0-1.0',source:'https://3dassets.dev/assets/tactical-shooter-hill-town-semi-auto-shotgun-eed4a083'},
+  {model:'Masked tactical operative variants',author:'StarKnightt, derived from Mixamo Vanguard rig',license:'Original model modifications MIT, underlying Mixamo animations retain source terms',source:'https://github.com/StarKnightt/counter-strike-in-browser/tree/92f3e6ddee40c6b531c0788c2cf3db4c56853a37/public/models'},
   {model:'Soldier rig',author:'Mixamo / Vanguard by T. Choonyung',license:'Mixamo asset terms — embedded game use',source:'https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf'}
  ]},null,2));
 console.log('COMBAT_ASSETS_READY',document.animations.map(a=>a.name).join(' | '));

@@ -265,7 +265,7 @@ function LookPad({look}:{look:React.RefObject<Axis>}){
 export default function BistroExperience(){
  const stick=useRef<Axis>({x:0,y:0}),look=useRef<Axis>({x:0,y:0}),loadedRef=useRef(false);
  const fire=useRef(0),reload=useRef(0),select=useRef(1),aim=useRef(false);
- const [combat,setCombat]=useState<CombatPulse>({shots:0,hits:0,eliminations:0,ammo:30,reserve:120,reload:false,weapon:'rifle',ready:false,targets:0});
+ const [combat,setCombat]=useState<CombatPulse>({shots:0,hits:0,eliminations:0,ammo:30,reserve:120,reload:false,weapon:'rifle',ready:false,targets:0,aiming:false});
  const [entered,setEntered]=useState(false),[quality,setQuality]=useState<Quality>('High');
  const [loading,setLoading]=useState(''),[error,setError]=useState('');
  const [stats,setStats]=useState<Metrics>({fps:0,calls:0,triangles:0,gpu:'WebGL2',meshes:0});
@@ -290,12 +290,30 @@ export default function BistroExperience(){
  <p style={{fontSize:12,letterSpacing:'.16em',opacity:.78,textAlign:'center'}}>URBAN BLOCK / FPS COMBAT PROTOTYPE · NO MULTIPLAYER</p>
  <button onClick={()=>{setEntered(true);setError('');setLoading('Инициализация сцены…')}} style={{border:0,background:'#e4c39a',color:'#212527',padding:'17px 29px',marginTop:20,fontWeight:800,letterSpacing:'.15em',cursor:'pointer'}}>ВОЙТИ НА КАРТУ →</button>
  <p style={{fontSize:10,opacity:.6,marginTop:35}}>На телефоне: левый стик — ходьба, справа — обзор. На ПК: WASD, мышь, 1/2/3 — оружие, R — перезарядка, Shift/ПКМ — прицел.</p>
- <p style={{fontSize:10,opacity:.6,marginTop:6,textAlign:'center',lineHeight:1.7}}>3D-окружение: <a href="https://developer.nvidia.com/orca/amazon-lumberyard-bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Amazon Lumberyard Bistro</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC BY 4.0</a><br/>glTF/KTX2: <a href="https://github.com/qian-o/GLTF-Assets/tree/main/Bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>qian-o</a> · адаптировано и оптимизировано для веба<br/>FPS arms + AK-74M: <a href="https://sketchfab.com/3d-models/fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Cransh — CC BY 4.0</a> · Pistol/shotgun + arms: <a href="https://github.com/petroulacl/fps-asset-kit" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC0</a> · Soldier: <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Mixamo</a></p>
+ <p style={{fontSize:10,opacity:.6,marginTop:6,textAlign:'center',lineHeight:1.7}}>3D-окружение: <a href="https://developer.nvidia.com/orca/amazon-lumberyard-bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Amazon Lumberyard Bistro</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC BY 4.0</a><br/>glTF/KTX2: <a href="https://github.com/qian-o/GLTF-Assets/tree/main/Bistro" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>qian-o</a> · адаптировано и оптимизировано для веба<br/>FPS arms + AK-74M: <a href="https://sketchfab.com/3d-models/fps-ak-74m-animations-94be8385c402474cacd39bc096c6ca14" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Cransh — CC BY 4.0</a> · Pistol/shotgun: <a href="https://3dassets.dev/packs/tactical-shooter-hill-town" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>CC0</a> · Soldier: <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer" style={{color:'#e4c39a'}}>Mixamo</a></p>
  </div>}
  {entered&&<><LookPad look={look}/><JoyStick value={stick}/>
+ {/* Sight picture is always centered on the actual camera ray used by combat raycasts.
+     Four etched reticle strokes fade to a fine dot while aiming. */}
+ <div role="img" aria-label="Центральный прицел"
+   style={{position:'absolute',left:'50%',top:'50%',width:40,height:40,
+     transform:'translate(-50%,-50%)',zIndex:32,pointerEvents:'none',
+     filter:'drop-shadow(0 1px 1px #070b0c)'}}>
+  <div style={{position:'absolute',left:17,top:17,width:6,height:6,
+   borderRadius:'50%',background:combat.aiming?'#ffdd9f':'#e7efe8',
+   border:'1px solid #172b2c',opacity:.97,
+   boxShadow:'0 0 0 1px #fff8'}}/>
+  {!combat.aiming&&([
+   {left:19,top:5,width:2,height:8},
+   {left:19,top:27,width:2,height:8},
+   {left:5,top:19,width:8,height:2},
+   {left:27,top:19,width:8,height:2}
+  ]).map((v,i)=><div key={i} style={{position:'absolute',...v,
+   background:'#e5f0e9',border:'0.6px solid #142123'}}/>)}
+ </div>
  <div aria-label="Выбор оружия" style={{position:'absolute',left:'max(15px,env(safe-area-inset-left))',top:'max(58px,env(safe-area-inset-top))',zIndex:34,display:'flex',gap:6}}>{COMBAT_WEAPONS.map((weapon,i)=><button key={weapon.id} onClick={()=>select.current=i+1} style={{border:'1px solid #b5b3a566',background:combat.weapon===weapon.id?'#cbb590dc':'#1a252ac9',color:combat.weapon===weapon.id?'#1c2628':'#ece7e2',borderRadius:4,padding:'8px 9px',fontSize:10,fontWeight:700,cursor:'pointer'}}>{i+1} · {weapon.label}</button>)}</div>
  <button aria-label="Выстрел" onPointerDown={e=>{e.preventDefault();fire.current++}} style={{position:'absolute',right:35,bottom:52,zIndex:35,border:'1px solid #ffffff80',background:'#253034bf',color:'white',borderRadius:'50%',width:86,height:86,fontSize:12,fontWeight:700,touchAction:'none'}}>FIRE</button>
- <button aria-label="Прицеливание" onPointerDown={()=>aim.current=true} onPointerUp={()=>aim.current=false} onPointerCancel={()=>aim.current=false} style={{position:'absolute',right:222,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 12px',fontSize:11,touchAction:'none'}}>ADS</button>
+ <button aria-label="Прицеливание" aria-pressed={combat.aiming} onClick={()=>{aim.current=!aim.current;}} style={{position:'absolute',right:222,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 12px',fontSize:11,touchAction:'none'}}>ADS</button>
  <button aria-label="Перезарядка" onClick={()=>reload.current++} style={{position:'absolute',right:142,bottom:70,zIndex:36,border:'1px solid #ffffff70',background:'#253034bf',color:'white',borderRadius:14,padding:'12px 15px',fontSize:12}}>R</button>
  <div style={{position:'absolute',bottom:9,right:18,zIndex:35,fontSize:11,background:'#172329b3',padding:8}}>{combat.weapon.toUpperCase()} · {combat.ammo} / {combat.reserve} · HIT {combat.hits} · K.O. {combat.eliminations}{combat.reload?' · RELOAD':''}{!combat.ready?' · LOADING ARMS':''}</div>
  <div style={{position:'absolute',left:'max(16px,env(safe-area-inset-left))',top:'max(12px,env(safe-area-inset-top))',zIndex:30,fontSize:11,textShadow:'0 2px 8px #000'}}>

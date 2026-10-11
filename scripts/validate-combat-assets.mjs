@@ -1,11 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve('public','combat');
-const glbFiles=['soldier.glb','arms.glb','pistol.glb','shotgun.glb'];
+const glbFiles=['soldier.glb','arms.glb','pistol.glb','shotgun.glb','operatives/mask.glb','operatives/wrap_goggles.glb','operatives/mask_cap.glb'];
 for(const file of glbFiles){
  const bytes=await fs.readFile(path.join(root,file));
  if(bytes.length<10000||bytes.toString('ascii',0,4)!=='glTF'||bytes.readUInt32LE(8)!==bytes.length)throw Error('Invalid GLB or LFS pointer: '+file);
  console.log('COMBAT_GLTF_PASS',file,bytes.length);
+}
+for(const variant of ['mask','wrap_goggles','mask_cap']){
+ const b=await fs.readFile(path.join(root,'operatives',variant+'.glb'));
+ const len=b.readUInt32LE(12),data=JSON.parse(b.toString('utf8',20,20+len));
+ if(!data.skins?.length||!data.animations?.some(x=>/Idle/i.test(x.name))||
+    !data.materials?.some(x=>x.pbrMetallicRoughness?.baseColorTexture))
+  throw Error('Operative variant missing skin, idle animation, or PBR albedo: '+variant);
 }
 const gltf=JSON.parse(await fs.readFile(path.join(root,'ak74','scene.gltf'),'utf8'));
 if(!gltf.skins?.length||!gltf.animations?.length||!gltf.meshes?.length)throw Error('Original animated rifle assets invalid');
