@@ -142,7 +142,7 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   let disposed=false;
   const bank=emptyView();view.current=bank;
   bank.root.position.set(AK_VIEWMODEL_POSES.hip.x,AK_VIEWMODEL_POSES.hip.y,AK_VIEWMODEL_POSES.hip.z);
-  bank.root.rotation.z=.40; // hip: subtly canted AK; ADS: iron sights straight ahead
+  bank.root.rotation.z=.65; // hip: lower-right carry; ADS: iron sights straight ahead
   bank.flash.position.set(-.06,.10,-.75);
   bank.flash.intensity=0;
   bank.root.add(bank.flash);
@@ -502,7 +502,7 @@ export function BistroCombat({trigger,reload,aim,onStatus,quality,mapReady,movem
   bank.root.position.z=THREE.MathUtils.damp(bank.root.position.z,z+recoil.current*.085,13,step);
   bank.root.rotation.x=THREE.MathUtils.damp(bank.root.rotation.x,-recoil.current*.08-ads*.012,13,step);
   bank.root.rotation.z=THREE.MathUtils.damp(bank.root.rotation.z,
-   THREE.MathUtils.lerp(.40,.30,ads)+drift*.35+recoil.current*.012,12,step);
+   THREE.MathUtils.lerp(.65,.30,ads)+drift*.35+recoil.current*.012,12,step);
   // Independent textured cloth sleeves follow the original two IK wrists.
   camera.updateWorldMatrix(true,false);
   for(const {mesh,hand,side} of bank.sleeves){
