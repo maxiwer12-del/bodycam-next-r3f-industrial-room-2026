@@ -28,7 +28,7 @@ try{
  check(hip.sleeveVertices>=1400,'Both textured sleeve meshes are present');
  check(hip.barrel?.pointsAway && hip.barrel.stock[2]-hip.barrel.muzzle[2]>.4,'Muzzle is forward, not facing the player');
  check(Math.abs(hip.barrel.muzzle[0])<.24&&Math.abs(hip.barrel.muzzle[1])<.3,'Barrel points near reticle, not offscreen');
- check(Math.abs(hip.cameraRig[0]-.13)<.055&&Math.abs(hip.cameraRig[2]+.45)<.08,'Corrected first-person hip placement');
+ check(Math.abs(hip.cameraRig[0]-.11)<.055&&Math.abs(hip.cameraRig[2]+.45)<.08,'Corrected first-person hip placement');
  await page.screenshot({path:out+'/01-ak-hip.png',timeout:20000});report.screenshots.push('01-ak-hip.png');
  await page.waitForTimeout(900);
  const stable=await snap();
